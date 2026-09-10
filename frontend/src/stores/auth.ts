@@ -36,7 +36,7 @@ export const useAuthStore = defineStore('auth', {
     initialized: false,
   }),
   getters: {
-    isAuthenticated: (state) => Boolean(getAccessToken() && state.user),
+    isAuthenticated: (state) => Boolean(state.user) && Boolean(getAccessToken()),
     onboardingComplete: (state) => state.user?.onboarding?.completed ?? false,
     activeTenant: (state) => state.tenants.find((tenant) => tenant.public_id === state.activeTenantId) || state.tenants[0] || null,
   },
