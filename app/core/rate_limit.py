@@ -14,16 +14,16 @@ async def check_rate_limit(key: str, limit: int | None = None, window_seconds: i
     if not settings.rate_limit_enabled:
         return
 
-    limit = limit or settings.rate_limit_requests
-    window_seconds = window_seconds or settings.rate_limit_window_seconds
-    bucket = f"rl:{key}:{int(time.time() // window_seconds)}"
+    configured_limit = limit if limit is not None else settings.rate_limit_requests
+    configured_window = window_seconds if window_seconds is not None else settings.rate_limit_window_seconds
+    bucket = f"rl:{key}:{int(time.time() // configured_window)}"
 
     try:
         count = await redis_client.incr(bucket)
         if count == 1:
-            await redis_client.expire(bucket, window_seconds + 1)
+            await redis_client.expire(bucket, configured_window + 1)
     except RedisError as exc:
         raise RuntimeError("Rate-limit infrastructure unavailable") from exc
 
-    if count > limit:
+    if count > configured_limit:
         raise RateLimitExceeded
