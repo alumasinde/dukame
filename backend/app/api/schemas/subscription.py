@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class PlanFeatureResponse(BaseModel):
@@ -20,8 +20,18 @@ class PlanResponse(BaseModel):
     quarterly_price_minor: int
     yearly_price_minor: int
     currency: str
+    trial_days: int
     is_active: bool
     features: list[PlanFeatureResponse]
+
+
+class SubscriptionChangeRequest(BaseModel):
+    plan_public_id: str = Field(min_length=8, max_length=64)
+    billing_interval: str = Field(default="monthly", pattern="^(monthly|quarterly|yearly)$")
+
+
+class SubscriptionCancelRequest(BaseModel):
+    immediately: bool = False
 
 
 class SubscriptionResponse(BaseModel):
