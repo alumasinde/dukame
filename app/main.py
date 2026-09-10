@@ -6,16 +6,22 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.api.v1.router import api_router
 from app.core.config import settings
+from app.core.database import engine
 from app.core.errors import install_exception_handlers
 from app.core.health import readiness_check
 from app.core.logging import configure_logging
+from app.core.redis import redis_client
 from app.middleware.rate_limit import RateLimitMiddleware
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     configure_logging(settings.log_level)
-    yield
+    try:
+        yield
+    finally:
+        await redis_client.aclose()
+        await engine.dispose()
 
 
 app = FastAPI(
@@ -35,6 +41,19 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "X-Request-ID", "Idempotency-Key"],
 )
 app.add_middleware(RateLimitMiddleware)
+
+
+@app.middleware("http")
+async def security_headers_middleware(request, call_next):
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+    if settings.is_production:
+        response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    return response
+
 
 install_exception_handlers(app)
 app.include_router(api_router, prefix="/api/v1")
