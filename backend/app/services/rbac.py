@@ -1,5 +1,6 @@
 import re
 import uuid
+from typing import cast
 
 from fastapi import HTTPException
 from sqlalchemy import delete, select
@@ -10,7 +11,7 @@ from app.models.rbac import Permission, TenantRole, TenantRolePermission
 
 
 async def get_membership(db: AsyncSession, user_id: int, tenant_id: int) -> TenantUser | None:
-    return await db.scalar(select(TenantUser).where(TenantUser.user_id == user_id, TenantUser.tenant_id == tenant_id, TenantUser.status == "active"))
+    return cast(TenantUser | None, await db.scalar(select(TenantUser).where(TenantUser.user_id == user_id, TenantUser.tenant_id == tenant_id, TenantUser.status == "active")))
 
 
 async def require_permission(db: AsyncSession, user: User, tenant_id: int, permission_key: str) -> TenantUser:
@@ -28,7 +29,7 @@ async def list_roles(db: AsyncSession, tenant_id: int) -> list[TenantRole]:
 
 
 async def get_role(db: AsyncSession, tenant_id: int, role_public_id: str) -> TenantRole | None:
-    return await db.scalar(select(TenantRole).where(TenantRole.tenant_id == tenant_id, TenantRole.public_id == role_public_id))
+    return cast(TenantRole | None, await db.scalar(select(TenantRole).where(TenantRole.tenant_id == tenant_id, TenantRole.public_id == role_public_id)))
 
 
 async def role_permissions(db: AsyncSession, role_id: int) -> list[str]:
