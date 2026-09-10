@@ -1,6 +1,7 @@
 import re
 import uuid
 from datetime import timedelta
+from typing import cast
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
@@ -52,7 +53,7 @@ async def create_tenant(db: AsyncSession, user: User, name: str, slug: str | Non
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="A valid shop name or slug is required")
     if await db.scalar(select(Tenant).where(Tenant.slug == tenant_slug)):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Shop slug is already in use")
-    plan = await db.scalar(select(Plan).where(Plan.slug == settings.default_plan_slug, Plan.is_active.is_(True)))
+    plan = cast(Plan | None, await db.scalar(select(Plan).where(Plan.slug == settings.default_plan_slug, Plan.is_active.is_(True))))
     if plan is None:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Default subscription plan is unavailable")
     tenant = Tenant(public_id=uuid.uuid4().hex, name=name.strip(), slug=tenant_slug)
@@ -77,4 +78,4 @@ async def create_tenant(db: AsyncSession, user: User, name: str, slug: str | Non
 
 
 async def get_tenant_by_public_id(db: AsyncSession, public_id: str) -> Tenant | None:
-    return await db.scalar(select(Tenant).where(Tenant.public_id == public_id))
+    return cast(Tenant | None, await db.scalar(select(Tenant).where(Tenant.public_id == public_id)))
