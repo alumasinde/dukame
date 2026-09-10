@@ -6,7 +6,17 @@ from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from app.core.config import settings
-from app.models import Base
+from app.models.base import Base
+from app.modules.auth.models.identity import AuthSession, User
+from app.modules.auth.models.tokens import PasswordResetToken, VerificationToken
+from app.modules.rbac.models.rbac import Permission, TenantRole, TenantRolePermission
+from app.modules.subscriptions.models.subscription import (
+    Plan,
+    PlanFeature,
+    Subscription,
+    SubscriptionEvent,
+)
+from app.modules.tenancy.models.tenant import Tenant, TenantUser
 
 config = context.config
 
