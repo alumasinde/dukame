@@ -1,14 +1,14 @@
-"""add last login timestamp
+"""Add last login timestamp.
 
 Revision ID: 0004_last_login
-Revises: 0003_rbac
+Revises: 0003_rbac_recovery
 """
 
 import sqlalchemy as sa
 from alembic import op
 
 revision = "0004_last_login"
-down_revision = "0003_rbac"
+down_revision = "0003_rbac_recovery"
 branch_labels = None
 depends_on = None
 
