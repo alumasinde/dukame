@@ -71,7 +71,7 @@ export const useAuthStore = defineStore('auth', {
       try {
         const { data: user } = await api.get<User>('/auth/me')
         this.user = user
-      } catch (err) {
+      } catch {
         throw new Error('Session validation failed')
       }
     },
@@ -95,15 +95,18 @@ export const useAuthStore = defineStore('auth', {
       }
     },
     async completeOnboarding(shopName: string, shopSlug?: string) {
-      const { data } = await api.post<OnboardingStatus>('/onboarding/shop', {
-        shop_name: shopName,
-        shop_slug: shopSlug,
-      })
-      if (this.user) {
-        this.user.onboarding = data
+      this.loading = true
+      try {
+        const { data } = await api.post<OnboardingStatus>('/onboarding/shop', {
+          shop_name: shopName,
+          shop_slug: shopSlug,
+        })
+        if (this.user) this.user.onboarding = data
+        await this.loadSession()
+        return data
+      } finally {
+        this.loading = false
       }
-      await this.loadSession()
-      return data
     },
     setActiveTenant(publicId: string | null) {
       this.activeTenantId = publicId
