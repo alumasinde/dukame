@@ -8,7 +8,7 @@ from app.core.security import get_current_user
 from app.models.identity import TenantUser, User
 from app.models.rbac import TenantRole
 from app.services.rbac import require_permission
-from app.services.tenant_phase2 import get_tenant_by_public_id
+from app.services.tenant import get_tenant_by_public_id
 
 router = APIRouter(prefix="/tenants/{tenant_public_id}/members", tags=["members"])
 
@@ -33,6 +33,10 @@ async def update_member_role(tenant_public_id: str, member_public_id: str, paylo
     member = await db.scalar(select(TenantUser).join(User, User.id == TenantUser.user_id).where(TenantUser.tenant_id == tenant.id, User.public_id == member_public_id))
     if role is None or member is None or member.status != "active":
         raise HTTPException(status_code=404, detail="Member or role not found")
+    if role.slug == "owner" and member.user_id != user.id:
+        current_role = await db.scalar(select(TenantRole).where(TenantRole.id == member.role_id, TenantRole.tenant_id == tenant.id))
+        if current_role is None or current_role.slug != "owner":
+            raise HTTPException(status_code=403, detail="Only an existing owner can assign the owner role")
     if member.user_id == user.id and role.slug != "owner":
         raise HTTPException(status_code=409, detail="Owners cannot remove their own owner role")
     member.role_id = role.id
