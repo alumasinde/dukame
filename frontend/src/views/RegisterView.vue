@@ -59,10 +59,10 @@ async function submit() {
         <label>
           Password
           <span class="password-field">
-            <input v-model="form.password" :type="showPassword ? 'text' : 'password'" minlength="12" autocomplete="new-password" placeholder="At least 12 characters" required />
+            <input v-model="form.password" :type="showPassword ? 'text' : 'password'" minlength="8" autocomplete="new-password" placeholder="At least 8 characters" required />
             <button type="button" class="password-toggle" :aria-label="showPassword ? 'Hide password' : 'Show password'" @click="showPassword = !showPassword">{{ showPassword ? 'Hide' : 'Show' }}</button>
           </span>
-          <small>Use at least 12 characters for a stronger account.</small>
+          <small>Use at least 8 characters for a stronger account.</small>
         </label>
 
         <label>
