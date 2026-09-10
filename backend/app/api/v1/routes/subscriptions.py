@@ -10,7 +10,7 @@ from app.models.identity import User
 from app.models.subscription import Plan
 from app.services.rbac import require_permission
 from app.services.subscription_v2 import cancel_subscription, change_subscription, get_tenant_subscription, list_active_plans, reactivate_subscription
-from app.services.tenant_phase2 import get_tenant_by_public_id
+from app.services.tenant import get_tenant_by_public_id
 
 router = APIRouter(prefix="/subscriptions", tags=["subscriptions"])
 
@@ -34,7 +34,8 @@ async def plans(db: AsyncSession = Depends(get_db)) -> list[PlanResponse]:
 
 @router.get("/{tenant_public_id}", response_model=SubscriptionResponse)
 async def current_subscription(tenant_public_id: str, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> SubscriptionResponse:
-    subscription = await get_tenant_subscription(db, user, tenant_public_id)
+    tenant = await authorized_tenant(db, user, tenant_public_id, "subscription.read")
+    subscription = await get_tenant_subscription(db, user, tenant.public_id)
     if subscription is None:
         raise HTTPException(status_code=404, detail="Subscription not found")
     return SubscriptionResponse(public_id=subscription.public_id, status=subscription.status, billing_interval=subscription.billing_interval, starts_at=subscription.starts_at, current_period_end=subscription.current_period_end, cancel_at_period_end=subscription.cancel_at_period_end, plan=plan_response(subscription.plan))
