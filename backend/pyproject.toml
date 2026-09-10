@@ -1,7 +1,11 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "dukame-api"
-version = "0.1.0"
-description = "DukaMe commerce platform API"
+version = "0.2.0"
+description = "DukaMe API"
 requires-python = ">=3.12,<3.14"
 dependencies = [
   "fastapi>=0.115,<1",
@@ -10,14 +14,17 @@ dependencies = [
   "aiomysql>=0.2,<1",
   "alembic>=1.15,<2",
   "pydantic-settings>=2.7,<3",
+  "email-validator>=2.2,<3",
   "redis>=5,<7",
   "cryptography>=44,<47",
+  "pwdlib[argon2]>=0.2,<1",
+  "PyJWT>=2.10,<3",
 ]
 
-[dependency-groups]
+[project.optional-dependencies]
 dev = [
   "pytest>=8,<9",
-  "pytest-asyncio>=0.25,<1",
+  "pytest-asyncio>=0.24,<1",
   "httpx>=0.28,<1",
   "ruff>=0.9,<1",
   "mypy>=1.15,<2",
@@ -31,16 +38,15 @@ line-length = 100
 target-version = "py312"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "B", "UP"]
+extend-select = ["I"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["app"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
 asyncio_mode = "auto"
 
 [tool.mypy]
 python_version = "3.12"
 strict = true
-warn_unused_ignores = true
+plugins = ["pydantic.mypy"]
