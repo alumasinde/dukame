@@ -1,9 +1,13 @@
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Index, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
+
+if TYPE_CHECKING:
+    from app.models.rbac import TenantRole
 
 
 class User(Base):
@@ -47,7 +51,11 @@ class TenantUser(Base):
     tenant: Mapped[Tenant] = relationship(back_populates="memberships")
     user: Mapped[User] = relationship(back_populates="memberships")
     role_record: Mapped["TenantRole | None"] = relationship(foreign_keys=[role_id])
-    __table_args__ = (Index("ix_tenant_users_user_id", "user_id"), Index("ix_tenant_users_tenant_status", "tenant_id", "status"), Index("ix_tenant_users_role_id", "role_id"))
+    __table_args__ = (
+        Index("ix_tenant_users_user_id", "user_id"),
+        Index("ix_tenant_users_tenant_status", "tenant_id", "status"),
+        Index("ix_tenant_users_role_id", "role_id"),
+    )
 
 
 class AuthSession(Base):
@@ -62,4 +70,7 @@ class AuthSession(Base):
     ip_address: Mapped[str | None] = mapped_column(String(45))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     user: Mapped[User] = relationship(back_populates="sessions")
-    __table_args__ = (Index("ix_auth_sessions_user_id", "user_id"), Index("ix_auth_sessions_expires_at", "expires_at"))
+    __table_args__ = (
+        Index("ix_auth_sessions_user_id", "user_id"),
+        Index("ix_auth_sessions_expires_at", "expires_at"),
+    )
