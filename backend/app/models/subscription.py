@@ -1,10 +1,23 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint, func
+from sqlalchemy import (
+    JSON,
+    BigInteger,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
+from app.models.identity import Tenant
 
 
 class Plan(Base):
@@ -58,7 +71,7 @@ class Subscription(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
-    tenant: Mapped["Tenant"] = relationship()
+    tenant: Mapped[Tenant] = relationship()
     plan: Mapped[Plan] = relationship(back_populates="subscriptions")
     events: Mapped[list["SubscriptionEvent"]] = relationship(back_populates="subscription", cascade="all, delete-orphan")
 

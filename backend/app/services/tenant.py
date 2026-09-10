@@ -1,6 +1,6 @@
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
@@ -30,7 +30,7 @@ async def create_tenant(db: AsyncSession, user: User, name: str, slug: str | Non
     db.add(tenant)
     await db.flush()
     db.add(TenantUser(tenant_id=tenant.id, user_id=user.id, role="owner", status="active"))
-    subscription = Subscription(public_id=uuid.uuid4().hex, tenant_id=tenant.id, plan_id=plan.id, status="active", billing_interval="monthly", starts_at=datetime.now(timezone.utc))
+    subscription = Subscription(public_id=uuid.uuid4().hex, tenant_id=tenant.id, plan_id=plan.id, status="active", billing_interval="monthly", starts_at=datetime.now(UTC))
     db.add(subscription)
     await db.flush()
     db.add(SubscriptionEvent(public_id=uuid.uuid4().hex, subscription_id=subscription.id, event_type="subscription.created", payload={"source": "tenant.created", "plan": plan.slug}))

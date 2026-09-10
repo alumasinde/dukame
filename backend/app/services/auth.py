@@ -1,13 +1,19 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
-from app.core.security import hash_password, make_session, revoke_all_user_sessions, revoke_session, token_hash, verify_password
+from app.core.security import (
+    hash_password,
+    make_session,
+    revoke_all_user_sessions,
+    revoke_session,
+    token_hash,
+    verify_password,
+)
 from app.models.identity import AuthSession, Tenant, TenantUser, User
 
 
@@ -35,7 +41,7 @@ async def authenticate(db: AsyncSession, email: str, password: str, user_agent: 
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is inactive")
     session, refresh = make_session(user, user_agent, ip_address)
-    user.last_login_at = datetime.now(timezone.utc)
+    user.last_login_at = datetime.now(UTC)
     db.add(session)
     await db.flush()
     return user, session, refresh
@@ -48,7 +54,7 @@ async def rotate_refresh_token(db: AsyncSession, refresh_token: str, user_agent:
     user = await db.get(User, session.user_id)
     if user is None or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
-    if session.revoked_at is not None or session.expires_at <= datetime.now(timezone.utc):
+    if session.revoked_at is not None or session.expires_at <= datetime.now(UTC):
         await revoke_all_user_sessions(db, user.id)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token is no longer valid")
     revoke_session(session)
@@ -66,4 +72,4 @@ async def logout(db: AsyncSession, session_public_id: str, user_id: int) -> None
 
 async def get_user_tenants(db: AsyncSession, user_id: int) -> list[tuple[Tenant, TenantUser]]:
     result = await db.execute(select(Tenant, TenantUser).join(TenantUser, TenantUser.tenant_id == Tenant.id).where(TenantUser.user_id == user_id, TenantUser.status == "active").order_by(Tenant.name))
-    return list(result.all())
+    return [(row[0], row[1]) for row in result.all()]
