@@ -27,6 +27,7 @@ from app.modules.auth.services.tokens import (
     reset_password,
     verify_email,
 )
+from app.modules.onboarding.services.onboarding import get_onboarding_status
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 logger = get_logger(__name__)
@@ -37,6 +38,20 @@ def _token_response(user: User, session: AuthSession, refresh: str) -> TokenResp
         access_token=create_access_token(user, session),
         refresh_token=refresh,
         expires_in=settings.access_token_ttl_seconds,
+    )
+
+
+async def _user_response(db: AsyncSession, user: User) -> UserResponse:
+    onboarding = await get_onboarding_status(db, user.id)
+    return UserResponse(
+        public_id=user.public_id,
+        email=user.email,
+        phone=user.phone,
+        first_name=user.first_name,
+        last_name=user.last_name,
+        is_active=user.is_active,
+        is_verified=user.is_verified,
+        onboarding=onboarding,
     )
 
 
@@ -69,7 +84,7 @@ async def register(
         f"Verify your account: {_frontend_url('verify-email', token)}",
     )
     await db.refresh(user)
-    return UserResponse.model_validate(user, from_attributes=True)
+    return await _user_response(db, user)
 
 
 @router.post("/verify-email", response_model=MessageResponse)
@@ -181,5 +196,7 @@ async def logout_current(
 
 
 @router.get("/me", response_model=UserResponse)
-async def me(user: User = Depends(get_current_user)) -> UserResponse:
-    return UserResponse.model_validate(user, from_attributes=True)
+async def me(
+    user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+) -> UserResponse:
+    return await _user_response(db, user)

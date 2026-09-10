@@ -5,20 +5,26 @@ const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/', redirect: '/dashboard' },
-    { path: '/login', component: () => import('./views/LoginView.vue'), meta: { guest: true } },
-    { path: '/register', component: () => import('./views/RegisterView.vue'), meta: { guest: true } },
-    { path: '/verify-email', component: () => import('./views/VerifyEmailView.vue'), meta: { guest: true } },
-    { path: '/reset-password', component: () => import('./views/ResetPasswordView.vue'), meta: { guest: true } },
+    { path: '/login', name: 'login', component: () => import('./views/LoginView.vue'), meta: { guest: true } },
+    { path: '/register', name: 'register', component: () => import('./views/RegisterView.vue'), meta: { guest: true } },
+    { path: '/verify-email', name: 'verify-email', component: () => import('./views/VerifyEmailView.vue'), meta: { guest: true } },
+    { path: '/reset-password', name: 'reset-password', component: () => import('./views/ResetPasswordView.vue'), meta: { guest: true } },
+    {
+      path: '/onboarding',
+      name: 'onboarding',
+      component: () => import('./views/OnboardingView.vue'),
+      meta: { auth: true, onboarding: true },
+    },
     {
       path: '/',
       component: () => import('./layouts/AppLayout.vue'),
       meta: { auth: true },
       children: [
-        { path: 'dashboard', component: () => import('./views/DashboardView.vue') },
-        { path: 'shops', component: () => import('./views/ShopsView.vue') },
-        { path: 'billing', component: () => import('./views/BillingView.vue') },
-        { path: 'team', component: () => import('./views/TeamView.vue') },
-        { path: 'settings', component: () => import('./views/SettingsView.vue') },
+        { path: 'dashboard', name: 'dashboard', component: () => import('./views/DashboardView.vue') },
+        { path: 'shops', name: 'shops', component: () => import('./views/ShopsView.vue') },
+        { path: 'billing', name: 'billing', component: () => import('./views/BillingView.vue') },
+        { path: 'team', name: 'team', component: () => import('./views/TeamView.vue') },
+        { path: 'settings', name: 'settings', component: () => import('./views/SettingsView.vue') },
       ],
     },
     { path: '/:pathMatch(.*)*', redirect: '/login' },
@@ -28,11 +34,22 @@ const router = createRouter({
 router.beforeEach(async (to) => {
   const auth = useAuthStore()
   await auth.initialize()
-  if (to.meta.auth && !auth.isAuthenticated) return '/login'
-  if (to.meta.guest && auth.isAuthenticated) return '/dashboard'
+
+  if (to.meta.auth && !auth.isAuthenticated) return { name: 'login' }
+
+  if (auth.isAuthenticated && !auth.onboardingComplete && !to.meta.onboarding) {
+    return { name: 'onboarding', replace: true }
+  }
+
+  if (auth.isAuthenticated && auth.onboardingComplete && to.meta.onboarding) {
+    return { name: 'dashboard', replace: true }
+  }
+
+  if (to.meta.guest && auth.isAuthenticated) {
+    return auth.onboardingComplete ? { name: 'dashboard', replace: true } : { name: 'onboarding', replace: true }
+  }
 })
 
-// Listen for logout events from other tabs/windows
 window.addEventListener('storage', (event) => {
   if (event.key === 'dukame_access_token' && !event.newValue) {
     const auth = useAuthStore()
@@ -41,14 +58,12 @@ window.addEventListener('storage', (event) => {
   }
 })
 
-// Listen for session expiration events
 window.addEventListener('dukame:session-expired', () => {
   const auth = useAuthStore()
   auth.logoutLocal()
   if (router.currentRoute.value.path !== '/login') router.push('/login')
 })
 
-// Periodic session validation (every 5 minutes)
 setInterval(async () => {
   const auth = useAuthStore()
   if (auth.isAuthenticated && auth.initialized) {

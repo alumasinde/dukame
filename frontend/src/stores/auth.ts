@@ -1,6 +1,13 @@
 import { defineStore } from 'pinia'
 import { api, clearTokens, getAccessToken, saveTokens } from '../lib/api'
 
+export interface OnboardingStatus {
+  completed: boolean
+  current_step: string | null
+  total_steps: number
+  tenant_public_id: string | null
+}
+
 export interface User {
   public_id: string
   email: string
@@ -9,6 +16,7 @@ export interface User {
   last_name: string
   is_active: boolean
   is_verified: boolean
+  onboarding: OnboardingStatus
 }
 
 export interface Tenant {
@@ -29,6 +37,7 @@ export const useAuthStore = defineStore('auth', {
   }),
   getters: {
     isAuthenticated: (state) => Boolean(getAccessToken() && state.user),
+    onboardingComplete: (state) => Boolean(state.user?.onboarding.completed),
     activeTenant: (state) => state.tenants.find((tenant) => tenant.public_id === state.activeTenantId) || state.tenants[0] || null,
   },
   actions: {
@@ -54,8 +63,9 @@ export const useAuthStore = defineStore('auth', {
       this.user = user
       this.tenants = tenants.items
       const stored = sessionStorage.getItem('dukame_tenant_public_id')
-      const exists = this.tenants.some((tenant) => tenant.public_id === stored)
-      this.setActiveTenant(exists ? stored! : this.tenants[0]?.public_id || null)
+      const preferred = user.onboarding.tenant_public_id || stored
+      const exists = this.tenants.some((tenant) => tenant.public_id === preferred)
+      this.setActiveTenant(exists ? preferred! : this.tenants[0]?.public_id || null)
     },
     async validateSession() {
       try {
@@ -80,6 +90,18 @@ export const useAuthStore = defineStore('auth', {
       try {
         await api.post('/auth/register', payload)
         await this.login(payload.email, payload.password)
+      } finally {
+        this.loading = false
+      }
+    },
+    async completeOnboarding(shopName: string, shopSlug?: string) {
+      this.loading = true
+      try {
+        await api.post('/onboarding/shop', {
+          shop_name: shopName,
+          shop_slug: shopSlug || undefined,
+        })
+        await this.loadSession()
       } finally {
         this.loading = false
       }
