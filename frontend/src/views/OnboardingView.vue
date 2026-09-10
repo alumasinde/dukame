@@ -15,7 +15,7 @@ const progress = computed(() => 100 / totalSteps.value)
 
 function suggestSlug() {
   if (shopSlug.value) return
-  shopSlug.value = shopName.value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 100)
+  shopSlug.value = shopName.value.toLowerCase().trim().replace(/[^a-z0-9]/g, '').slice(0, 100)
 }
 
 async function submit() {
@@ -45,7 +45,7 @@ async function submit() {
       <div class="onboarding-meta">
         <span class="onboarding-step">Step 1 of {{ totalSteps }}</span>
         <span class="onboarding-secure">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10V8a5 5 0 0 1 10 0v2M6 10h12v10H6zM12 14v2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <i class="fa-solid fa-shield-halved" aria-hidden="true"></i>
           Secure setup
         </span>
       </div>
@@ -64,7 +64,7 @@ async function submit() {
 
       <div class="onboarding-benefit">
         <div class="onboarding-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><path d="M4 10.5 12 4l8 6.5V20H4zM9 20v-5h6v5M7 10h10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <i class="fa-solid fa-store"></i>
         </div>
         <div>
           <h2>Your shop is your DukaMe workspace</h2>
@@ -77,7 +77,7 @@ async function submit() {
       <form class="onboarding-form" @submit.prevent="submit" novalidate>
         <div class="field-group">
           <label for="shop-name">Shop name</label>
-          <input id="shop-name" v-model.trim="shopName" type="text" autocomplete="organization" placeholder="e.g. Mama Njeri Home Store" maxlength="255" required autofocus @blur="suggestSlug" />
+          <input id="shop-name" v-model.trim="shopName" type="text" autocomplete="organization" placeholder="e.g. Glee Hotel Limited" maxlength="255" required autofocus @blur="suggestSlug" />
           <small>Use the name your customers already know you by.</small>
         </div>
 
@@ -85,21 +85,20 @@ async function submit() {
           <label for="shop-slug">Shop link <span class="muted">Optional</span></label>
           <div class="input-prefix">
             <span>dukame.shop/</span>
-            <input id="shop-slug" v-model.trim="shopSlug" placeholder="mama-njeri" maxlength="100" pattern="[a-z0-9]+(?:-[a-z0-9]+)*" autocomplete="off" />
+            <input id="shop-slug" v-model.trim="shopSlug" placeholder="gleehotellimited" maxlength="100" pattern="[a-z0-9]+" autocomplete="off" />
           </div>
-          <small>Lowercase letters, numbers and hyphens only. A link will be suggested from your shop name.</small>
+          <small>Lowercase letters and numbers only. We'll remove spaces and symbols automatically.</small>
         </div>
 
         <button type="submit" class="button button-primary button-block button-lg" :disabled="auth.loading">
           <span v-if="auth.loading" class="button-spinner" aria-hidden="true"></span>
+          <i v-else class="fa-solid fa-arrow-right" aria-hidden="true"></i>
           {{ auth.loading ? 'Creating your workspace…' : 'Create my shop' }}
         </button>
       </form>
 
       <div class="onboarding-footer">
-        <div class="footer-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><path d="M12 3 5 6v5c0 4.5 2.9 8.3 7 10 4.1-1.7 7-5.5 7-10V6zM9.5 12l1.7 1.7 3.5-3.7" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </div>
+        <div class="footer-icon" aria-hidden="true"><i class="fa-solid fa-lock"></i></div>
         <p>Your shop details can be updated later from Settings.</p>
       </div>
     </section>
@@ -112,7 +111,7 @@ async function submit() {
 .onboarding-meta { display: flex; align-items: center; gap: 1.25rem; }
 .onboarding-step { color: var(--ink); font-size: .8rem; font-weight: 800; }
 .onboarding-secure { display: inline-flex; align-items: center; gap: .4rem; color: var(--muted); font-size: .75rem; font-weight: 650; }
-.onboarding-secure svg { width: 15px; height: 15px; }
+.onboarding-secure i { color: var(--primary); }
 .onboarding-shell { width: min(680px, 100%); margin: 3.25rem auto 0; padding: 2.5rem; background: var(--surface); border: 1px solid var(--line); border-radius: 22px; box-shadow: var(--shadow-lg); }
 .onboarding-progress { height: 5px; overflow: hidden; margin: -2.5rem -2.5rem 2.5rem; background: #e7efed; border-radius: 22px 22px 0 0; }
 .onboarding-progress span { display: block; height: 100%; background: var(--accent); border-radius: inherit; transition: width .25s ease; }
@@ -120,8 +119,7 @@ async function submit() {
 .onboarding-intro h1 { margin: 0 0 .65rem; font-size: clamp(2rem, 5vw, 2.7rem); line-height: 1.08; letter-spacing: -.045em; }
 .onboarding-intro p { margin: 0; max-width: 590px; color: var(--muted); line-height: 1.65; }
 .onboarding-benefit { display: flex; gap: 1rem; align-items: flex-start; margin-top: 2rem; padding: 1rem 1.1rem; background: #f6faf9; border: 1px solid #e0ebe8; border-radius: 14px; }
-.onboarding-icon { width: 44px; height: 44px; flex: 0 0 44px; display: grid; place-items: center; border-radius: 12px; background: var(--soft-strong); color: var(--primary); }
-.onboarding-icon svg { width: 23px; height: 23px; }
+.onboarding-icon { width: 44px; height: 44px; flex: 0 0 44px; display: grid; place-items: center; border-radius: 12px; background: var(--soft-strong); color: var(--primary); font-size: 18px; }
 .onboarding-benefit h2 { margin: 0; font-size: .95rem; letter-spacing: -.01em; }
 .onboarding-benefit p { margin: .3rem 0 0; color: var(--muted); font-size: .84rem; line-height: 1.5; }
 .onboarding-form { display: grid; gap: 1.25rem; margin-top: 1.75rem; }
@@ -137,8 +135,7 @@ async function submit() {
 .input-prefix input { min-width: 0; min-height: 46px; border: 0; border-radius: 0; box-shadow: none !important; }
 .onboarding-footer { display: flex; gap: .65rem; align-items: center; justify-content: center; margin-top: 1.25rem; color: var(--muted); }
 .onboarding-footer p { margin: 0; font-size: .73rem; }
-.footer-icon { width: 18px; height: 18px; color: var(--primary); }
-.footer-icon svg { width: 100%; height: 100%; }
+.footer-icon { color: var(--primary); font-size: .72rem; }
 @media (max-width: 640px) {
   .onboarding-page { padding: 1rem .75rem 2rem; }
   .onboarding-header { padding: 0 .25rem; }
