@@ -57,6 +57,14 @@ export const useAuthStore = defineStore('auth', {
       const exists = this.tenants.some((tenant) => tenant.public_id === stored)
       this.setActiveTenant(exists ? stored! : this.tenants[0]?.public_id || null)
     },
+    async validateSession() {
+      try {
+        const { data: user } = await api.get<User>('/auth/me')
+        this.user = user
+      } catch {
+        throw new Error('Session validation failed')
+      }
+    },
     async login(email: string, password: string) {
       this.loading = true
       try {
@@ -88,7 +96,11 @@ export const useAuthStore = defineStore('auth', {
       this.activeTenantId = null
     },
     async logout() {
-      try { await api.post('/auth/logout') } finally { this.logoutLocal() }
+      try {
+        await api.post('/auth/logout')
+      } finally {
+        this.logoutLocal()
+      }
     },
   },
 })

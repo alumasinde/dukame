@@ -21,7 +21,7 @@ const router = createRouter({
         { path: 'settings', component: () => import('./views/SettingsView.vue') },
       ],
     },
-    { path: '/:pathMatch(.*)*', redirect: '/dashboard' },
+    { path: '/:pathMatch(.*)*', redirect: '/login' },
   ],
 })
 
@@ -32,10 +32,33 @@ router.beforeEach(async (to) => {
   if (to.meta.guest && auth.isAuthenticated) return '/dashboard'
 })
 
+// Listen for logout events from other tabs/windows
+window.addEventListener('storage', (event) => {
+  if (event.key === 'dukame_access_token' && !event.newValue) {
+    const auth = useAuthStore()
+    auth.logoutLocal()
+    if (router.currentRoute.value.path !== '/login') router.push('/login')
+  }
+})
+
+// Listen for session expiration events
 window.addEventListener('dukame:session-expired', () => {
   const auth = useAuthStore()
   auth.logoutLocal()
   if (router.currentRoute.value.path !== '/login') router.push('/login')
 })
+
+// Periodic session validation (every 5 minutes)
+setInterval(async () => {
+  const auth = useAuthStore()
+  if (auth.isAuthenticated && auth.initialized) {
+    try {
+      await auth.validateSession()
+    } catch {
+      auth.logoutLocal()
+      if (router.currentRoute.value.path !== '/login') router.push('/login')
+    }
+  }
+}, 5 * 60 * 1000)
 
 export default router

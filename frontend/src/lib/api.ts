@@ -27,6 +27,10 @@ function clearTokens() {
   sessionStorage.removeItem('dukame_tenant_public_id')
 }
 
+function getRequestId(headers: any) {
+  return headers['x-request-id'] || 'unknown'
+}
+
 api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   const token = getAccessToken()
   if (token) config.headers.Authorization = `Bearer ${token}`
@@ -37,22 +41,29 @@ api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
     const original = error.config as (InternalAxiosRequestConfig & { _retry?: boolean }) | undefined
+
+    // Only retry on 401 with valid refresh token
     if (error.response?.status !== 401 || !original || original._retry || !getRefreshToken()) {
       return Promise.reject(error)
     }
 
     original._retry = true
+
+    // Deduplicate refresh requests
     if (!refreshPromise) {
-      refreshPromise = api.post('/auth/refresh', { refresh_token: getRefreshToken() })
+      refreshPromise = api
+        .post('/auth/refresh', { refresh_token: getRefreshToken() })
         .then(({ data }) => {
           saveTokens(data.access_token, data.refresh_token)
           return data.access_token as string
         })
-        .catch(() => {
+        .catch((refreshError) => {
           clearTokens()
           return null
         })
-        .finally(() => { refreshPromise = null })
+        .finally(() => {
+          refreshPromise = null
+        })
     }
 
     const token = await refreshPromise
@@ -60,9 +71,11 @@ api.interceptors.response.use(
       window.dispatchEvent(new CustomEvent('dukame:session-expired'))
       return Promise.reject(error)
     }
+
+    // Retry original request with new token
     original.headers.Authorization = `Bearer ${token}`
     return api.request(original)
   },
 )
 
-export { api, saveTokens, clearTokens, getAccessToken, getRefreshToken }
+export { api, saveTokens, clearTokens, getAccessToken, getRefreshToken, getRequestId }

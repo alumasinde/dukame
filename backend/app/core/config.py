@@ -27,7 +27,8 @@ class Settings(BaseSettings):
     refresh_token_bytes: int = Field(default=32, ge=32, le=128)
     default_plan_slug: str = "free"
     trusted_hosts: list[str] = Field(default_factory=lambda: ["localhost", "127.0.0.1", "dukamedev.local"])
-    cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000", "http://localhost:5173", "http://localhost:5500", "http://127.0.0.1:5173", "http://127.0.0.1:5500", "http://dukamedev.local:5173"])
+    cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173", "http://127.0.0.1:5173", "http://dukamedev.local:5173"])
+    frontend_base_url: str = "http://localhost:5173"
 
     @field_validator("environment")
     @classmethod
