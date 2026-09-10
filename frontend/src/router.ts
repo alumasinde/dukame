@@ -5,7 +5,7 @@ const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/', redirect: '/dashboard' },
-    { path: '/login', name: 'login', component: () => import('./views/LoginView.vue'), meta: { guest: true } },
+    { path: '/login', name: 'login', component: () => import('./views/LoginViewClean.vue'), meta: { guest: true } },
     { path: '/register', name: 'register', component: () => import('./views/RegisterView.vue'), meta: { guest: true } },
     { path: '/verify-email', name: 'verify-email', component: () => import('./views/VerifyEmailView.vue'), meta: { guest: true } },
     { path: '/reset-password', name: 'reset-password', component: () => import('./views/ResetPasswordView.vue'), meta: { guest: true } },
