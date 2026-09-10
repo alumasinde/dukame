@@ -56,21 +56,26 @@ export const useAuthStore = defineStore('auth', {
         this.initialized = true
       }
     },
-    async loadSession() {
-      const [{ data: user }, { data: tenants }] = await Promise.all([
-        api.get<User>('/auth/me'),
-        api.get<{ items: Tenant[] }>('/tenants'),
-      ])
+    async loadUser() {
+      const { data: user } = await api.get<User>('/auth/me')
       this.user = user
-      this.tenants = tenants.items
+      return user
+    },
+    async loadTenants() {
+      const { data } = await api.get<{ items: Tenant[] }>('/tenants')
+      this.tenants = data.items
       const stored = sessionStorage.getItem('dukame_tenant_public_id')
       const exists = this.tenants.some((tenant) => tenant.public_id === stored)
       this.setActiveTenant(exists ? stored! : this.tenants[0]?.public_id || null)
+      return this.tenants
+    },
+    async loadSession() {
+      await this.loadUser()
+      await this.loadTenants()
     },
     async validateSession() {
       try {
-        const { data: user } = await api.get<User>('/auth/me')
-        this.user = user
+        await this.loadUser()
       } catch {
         throw new Error('Session validation failed')
       }
@@ -80,7 +85,22 @@ export const useAuthStore = defineStore('auth', {
       try {
         const { data } = await api.post('/auth/login', { email, password })
         saveTokens(data.access_token, data.refresh_token)
-        await this.loadSession()
+
+        await this.loadUser()
+
+        try {
+          await this.loadTenants()
+        } catch (err) {
+          console.error('[Auth] Workspace list could not be loaded after sign in:', err)
+          this.tenants = []
+          this.setActiveTenant(null)
+        }
+      } catch (err) {
+        clearTokens()
+        this.user = null
+        this.tenants = []
+        this.activeTenantId = null
+        throw err
       } finally {
         this.loading = false
       }
