@@ -5,10 +5,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.time import utc_now
-from app.core.token import expires_in, hash_token, random_token
 from app.modules.auth.models.identity import User
 from app.modules.auth.models.tokens import PasswordResetToken, VerificationToken
 from app.modules.auth.security import hash_password, revoke_all_user_sessions
+from app.modules.auth.token import expires_in, hash_token, random_token
 
 
 async def issue_verification_token(db: AsyncSession, user: User) -> str:
