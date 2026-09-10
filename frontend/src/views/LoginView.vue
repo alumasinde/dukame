@@ -13,7 +13,6 @@ const error = ref('')
 const errorDetails = ref('')
 
 function getErrorMessage(err: any): { message: string; details: string } {
-  // Try to extract specific error code
   const code = err?.response?.data?.error?.code
   const message = err?.response?.data?.error?.message
   const requestId = getRequestId(err?.response?.headers || {})
@@ -60,11 +59,13 @@ function getErrorMessage(err: any): { message: string; details: string } {
 }
 
 async function submit() {
+  if (auth.loading) return
   error.value = ''
   errorDetails.value = ''
+
   try {
     await auth.login(email.value, password.value)
-    await router.push('/dashboard')
+    await router.replace(auth.onboardingComplete ? '/dashboard' : '/onboarding')
   } catch (err: any) {
     const { message, details } = getErrorMessage(err)
     error.value = message
@@ -126,7 +127,7 @@ async function submit() {
           </span>
         </label>
 
-        <button class="button button-primary button-block button-lg" :disabled="auth.loading">
+        <button type="submit" class="button button-primary button-block button-lg" :disabled="auth.loading">
           <span v-if="auth.loading" class="button-spinner" aria-hidden="true"></span>
           {{ auth.loading ? 'Signing in…' : 'Sign in' }}
         </button>
