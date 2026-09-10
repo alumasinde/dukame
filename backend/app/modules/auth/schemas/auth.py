@@ -1,11 +1,6 @@
 from pydantic import BaseModel, EmailStr, Field
 
-
-class OnboardingStatusSchema(BaseModel):
-    completed: bool
-    current_step: str | None
-    total_steps: int
-    tenant_public_id: str | None = None
+from app.modules.onboarding.schemas.onboarding import OnboardingStatus
 
 
 class RegisterRequest(BaseModel):
@@ -40,7 +35,7 @@ class UserResponse(BaseModel):
     last_name: str
     is_active: bool
     is_verified: bool
-    onboarding: OnboardingStatusSchema
+    onboarding: OnboardingStatus
 
 
 class VerifyEmailRequest(BaseModel):
