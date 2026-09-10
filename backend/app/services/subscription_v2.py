@@ -1,5 +1,5 @@
 import uuid
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from fastapi import HTTPException
 from sqlalchemy import select
@@ -23,8 +23,11 @@ async def get_tenant_subscription(db: AsyncSession, user: User, tenant_public_id
     return result.scalar_one_or_none()
 
 
-def interval_end(start, interval: str, trial_days: int = 0):
-    return start + timedelta(days={"monthly": 30, "quarterly": 90, "yearly": 365}[interval] + trial_days)
+def interval_end(start: datetime, interval: str, trial_days: int = 0) -> datetime:
+    days = {"monthly": 30, "quarterly": 90, "yearly": 365}.get(interval)
+    if days is None:
+        raise HTTPException(status_code=422, detail="Invalid billing interval")
+    return start + timedelta(days=days + trial_days)
 
 
 async def change_subscription(db: AsyncSession, user: User, tenant_public_id: str, plan_public_id: str, billing_interval: str) -> Subscription:
