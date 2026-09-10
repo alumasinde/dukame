@@ -1,12 +1,11 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.schemas.tenant import CreateTenantRequest, TenantListResponse, TenantResponse
 from app.core.database import get_db
-from app.core.security import get_current_user
-from app.models.identity import User
-from app.services.auth import get_user_tenants
-from app.services.tenant import create_tenant
+from app.modules.auth.models.identity import User
+from app.modules.auth.security import get_current_user
+from app.modules.tenancy.schemas.tenant import CreateTenantRequest, TenantListResponse, TenantResponse
+from app.modules.tenancy.services.tenant import create_tenant, get_user_tenants
 
 router = APIRouter(prefix="/tenants", tags=["tenancy"])
 

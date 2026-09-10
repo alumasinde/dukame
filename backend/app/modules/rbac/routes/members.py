@@ -2,13 +2,14 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.schemas.rbac import MemberResponse, UpdateMemberRoleRequest
 from app.core.database import get_db
-from app.core.security import get_current_user
-from app.models.identity import TenantUser, User
-from app.models.rbac import TenantRole
-from app.services.rbac import require_permission
-from app.services.tenant import get_tenant_by_public_id
+from app.modules.auth.models.identity import User
+from app.modules.auth.security import get_current_user
+from app.modules.rbac.models.rbac import TenantRole
+from app.modules.rbac.schemas.rbac import MemberResponse, UpdateMemberRoleRequest
+from app.modules.rbac.services.rbac import require_permission
+from app.modules.tenancy.models.tenant import TenantUser
+from app.modules.tenancy.services.tenant import get_tenant_by_public_id
 
 router = APIRouter(prefix="/tenants/{tenant_public_id}/members", tags=["members"])
 

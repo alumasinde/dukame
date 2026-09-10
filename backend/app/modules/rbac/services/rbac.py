@@ -6,8 +6,9 @@ from fastapi import HTTPException
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.identity import TenantUser, User
-from app.models.rbac import Permission, TenantRole, TenantRolePermission
+from app.modules.auth.models.identity import User
+from app.modules.rbac.models.rbac import Permission, TenantRole, TenantRolePermission
+from app.modules.tenancy.models.tenant import TenantUser
 
 
 async def get_membership(db: AsyncSession, user_id: int, tenant_id: int) -> TenantUser | None:

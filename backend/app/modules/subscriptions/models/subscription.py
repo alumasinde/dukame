@@ -1,23 +1,13 @@
 from datetime import datetime
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
-from sqlalchemy import (
-    JSON,
-    BigInteger,
-    Boolean,
-    DateTime,
-    ForeignKey,
-    Index,
-    Integer,
-    String,
-    Text,
-    UniqueConstraint,
-    func,
-)
+from sqlalchemy import JSON, BigInteger, Boolean, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
-from app.models.identity import Tenant
+
+if TYPE_CHECKING:
+    from app.modules.tenancy.models.tenant import Tenant
 
 
 class Plan(Base):
@@ -65,7 +55,7 @@ class Subscription(Base):
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
-    tenant: Mapped[Tenant] = relationship()
+    tenant: Mapped["Tenant"] = relationship()
     plan: Mapped[Plan] = relationship(back_populates="subscriptions")
     events: Mapped[list["SubscriptionEvent"]] = relationship(back_populates="subscription", cascade="all, delete-orphan")
     __table_args__ = (UniqueConstraint("tenant_id", name="uq_subscriptions_tenant"), Index("ix_subscriptions_status_period", "status", "current_period_end"))

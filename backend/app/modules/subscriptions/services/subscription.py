@@ -7,8 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.time import utc_now
-from app.models.identity import Tenant, TenantUser, User
-from app.models.subscription import Plan, Subscription, SubscriptionEvent
+from app.modules.auth.models.identity import User
+from app.modules.subscriptions.models.subscription import Plan, Subscription, SubscriptionEvent
+from app.modules.tenancy.models.tenant import Tenant, TenantUser
 
 VALID_INTERVALS = {"monthly": "monthly_price_minor", "quarterly": "quarterly_price_minor", "yearly": "yearly_price_minor"}
 

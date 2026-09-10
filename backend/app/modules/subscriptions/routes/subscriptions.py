@@ -3,14 +3,15 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.schemas.subscription import PlanResponse, SubscriptionCancelRequest, SubscriptionChangeRequest, SubscriptionResponse
 from app.core.database import get_db
-from app.core.security import get_current_user
-from app.models.identity import Tenant, User
-from app.models.subscription import Plan
-from app.services.rbac import require_permission
-from app.services.subscription_v2 import cancel_subscription, change_subscription, get_tenant_subscription, list_active_plans, reactivate_subscription
-from app.services.tenant import get_tenant_by_public_id
+from app.modules.auth.models.identity import User
+from app.modules.auth.security import get_current_user
+from app.modules.rbac.services.rbac import require_permission
+from app.modules.subscriptions.models.subscription import Plan
+from app.modules.subscriptions.schemas.subscription import PlanResponse, SubscriptionCancelRequest, SubscriptionChangeRequest, SubscriptionResponse
+from app.modules.subscriptions.services.subscription import cancel_subscription, change_subscription, get_tenant_subscription, list_active_plans, reactivate_subscription
+from app.modules.tenancy.models.tenant import Tenant
+from app.modules.tenancy.services.tenant import get_tenant_by_public_id
 
 router = APIRouter(prefix="/subscriptions", tags=["subscriptions"])
 

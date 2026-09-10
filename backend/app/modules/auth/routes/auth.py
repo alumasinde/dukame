@@ -4,14 +4,14 @@ from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.schemas.auth import ForgotPasswordRequest, LoginRequest, MessageResponse, RefreshRequest, RegisterRequest, ResendVerificationRequest, ResetPasswordRequest, TokenResponse, UserResponse, VerifyEmailRequest
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.email import send_email
-from app.core.security import create_access_token, decode_access_token, get_current_user
-from app.models.identity import AuthSession, User
-from app.services.auth import authenticate, logout, register_user, rotate_refresh_token
-from app.services.identity_tokens import issue_password_reset_token, issue_verification_token, reset_password, verify_email
+from app.modules.auth.models.identity import AuthSession, User
+from app.modules.auth.security import create_access_token, decode_access_token, get_current_user
+from app.modules.auth.services.auth import authenticate, logout, register_user, rotate_refresh_token
+from app.modules.auth.services.tokens import issue_password_reset_token, issue_verification_token, reset_password, verify_email
+from app.modules.auth.schemas.auth import ForgotPasswordRequest, LoginRequest, MessageResponse, RefreshRequest, RegisterRequest, ResendVerificationRequest, ResetPasswordRequest, TokenResponse, UserResponse, VerifyEmailRequest
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 

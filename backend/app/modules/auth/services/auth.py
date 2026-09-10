@@ -5,16 +5,10 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security import (
-    hash_password,
-    make_session,
-    revoke_all_user_sessions,
-    revoke_session,
-    token_hash,
-    verify_password,
-)
 from app.core.time import ensure_utc, utc_now
-from app.models.identity import AuthSession, Tenant, TenantUser, User
+from app.modules.auth.models.identity import AuthSession, User
+from app.modules.auth.security import hash_password, make_session, revoke_all_user_sessions, revoke_session, token_hash, verify_password
+from app.modules.tenancy.models.tenant import Tenant, TenantUser
 
 
 async def register_user(db: AsyncSession, email: str, password: str, first_name: str, last_name: str, phone: str | None) -> User:
@@ -68,8 +62,3 @@ async def logout(db: AsyncSession, session_public_id: str, user_id: int) -> None
     session = await db.scalar(select(AuthSession).where(AuthSession.public_id == session_public_id, AuthSession.user_id == user_id).with_for_update())
     if session:
         revoke_session(session)
-
-
-async def get_user_tenants(db: AsyncSession, user_id: int) -> list[tuple[Tenant, TenantUser]]:
-    result = await db.execute(select(Tenant, TenantUser).join(TenantUser, TenantUser.tenant_id == Tenant.id).where(TenantUser.user_id == user_id, TenantUser.status == "active").order_by(Tenant.name))
-    return [(row[0], row[1]) for row in result.all()]

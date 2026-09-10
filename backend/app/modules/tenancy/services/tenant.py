@@ -10,9 +10,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.time import utc_now
-from app.models.identity import Tenant, TenantUser, User
-from app.models.rbac import Permission, TenantRole, TenantRolePermission
-from app.models.subscription import Plan, Subscription, SubscriptionEvent
+from app.modules.auth.models.identity import User
+from app.modules.rbac.models.rbac import Permission, TenantRole, TenantRolePermission
+from app.modules.subscriptions.models.subscription import Plan, Subscription, SubscriptionEvent
+from app.modules.tenancy.models.tenant import Tenant, TenantUser
 
 DEFAULT_ROLES = (("Owner", "owner"), ("Administrator", "admin"), ("Manager", "manager"), ("Staff", "staff"))
 DEFAULT_ROLE_PERMISSIONS = {
@@ -79,3 +80,8 @@ async def create_tenant(db: AsyncSession, user: User, name: str, slug: str | Non
 
 async def get_tenant_by_public_id(db: AsyncSession, public_id: str) -> Tenant | None:
     return cast(Tenant | None, await db.scalar(select(Tenant).where(Tenant.public_id == public_id)))
+
+
+async def get_user_tenants(db: AsyncSession, user_id: int) -> list[tuple[Tenant, TenantUser]]:
+    result = await db.execute(select(Tenant, TenantUser).join(TenantUser, TenantUser.tenant_id == Tenant.id).where(TenantUser.user_id == user_id, TenantUser.status == "active").order_by(Tenant.name))
+    return [(row[0], row[1]) for row in result.all()]
