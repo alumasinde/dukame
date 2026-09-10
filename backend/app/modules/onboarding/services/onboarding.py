@@ -6,7 +6,7 @@ from app.modules.onboarding.schemas.onboarding import OnboardingStatus
 from app.modules.tenancy.models.tenant import Tenant, TenantUser
 from app.modules.tenancy.services.tenant import create_tenant
 
-TOTAL_STEPS = 1
+TOTAL_STEPS = 3
 
 
 async def get_onboarding_status(db: AsyncSession, user_id: int) -> OnboardingStatus:
@@ -21,7 +21,7 @@ async def get_onboarding_status(db: AsyncSession, user_id: int) -> OnboardingSta
     completed = tenant_public_id is not None
     return OnboardingStatus(
         completed=completed,
-        current_step=None if completed else "shop",
+        current_step=None if completed else "shop_setup",
         total_steps=TOTAL_STEPS,
         tenant_public_id=tenant_public_id,
     )
