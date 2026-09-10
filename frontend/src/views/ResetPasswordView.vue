@@ -73,10 +73,10 @@ async function reset() {
         <label>
           New password
           <span class="password-field">
-            <input v-model="password" :type="showPassword ? 'text' : 'password'" minlength="12" autocomplete="new-password" placeholder="At least 12 characters" required />
+            <input v-model="password" :type="showPassword ? 'text' : 'password'" minlength="8" autocomplete="new-password" placeholder="At least 8 characters" required />
             <button type="button" class="password-toggle" @click="showPassword = !showPassword">{{ showPassword ? 'Hide' : 'Show' }}</button>
           </span>
-          <small>Use at least 12 characters.</small>
+          <small>Use at least 8 characters.</small>
         </label>
         <label>
           Confirm password
