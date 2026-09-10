@@ -12,16 +12,20 @@ const password = ref('')
 const confirm = ref('')
 const showPassword = ref(false)
 const showConfirm = ref(false)
+const loading = ref(false)
 const token = typeof route.query.token === 'string' ? route.query.token : ''
 const mode = ref(Boolean(token))
 
 async function requestReset() {
   error.value = ''
+  loading.value = true
   try {
     await api.post('/auth/forgot-password', { email: email.value })
     sent.value = true
   } catch (err: any) {
     error.value = err?.response?.data?.message || err?.response?.data?.detail || 'Unable to submit the request.'
+  } finally {
+    loading.value = false
   }
 }
 
@@ -31,11 +35,14 @@ async function reset() {
     error.value = 'Passwords do not match.'
     return
   }
+  loading.value = true
   try {
     await api.post('/auth/reset-password', { token, password: password.value })
     await router.push('/login')
   } catch (err: any) {
     error.value = err?.response?.data?.message || err?.response?.data?.detail || 'The reset link is invalid or expired.'
+  } finally {
+    loading.value = false
   }
 }
 </script>
@@ -44,7 +51,7 @@ async function reset() {
   <main class="auth-page">
     <div class="auth-brand"><span class="brand-mark">D</span><strong>DukaMe</strong></div>
 
-    <section class="auth-card" aria-labelledby="reset-title">
+    <section class="auth-card" aria-labelledby="reset-title" :aria-busy="loading">
       <div class="auth-heading">
         <span class="badge">Account security</span>
         <h1 id="reset-title">{{ mode ? 'Set a new password' : 'Reset your password' }}</h1>
@@ -56,7 +63,10 @@ async function reset() {
 
       <form v-if="!mode" class="form-stack" @submit.prevent="requestReset">
         <label>Email<input v-model.trim="email" type="email" autocomplete="email" placeholder="you@example.com" required autofocus /></label>
-        <button class="button button-primary button-block button-lg">Send reset link</button>
+        <button class="button button-primary button-block button-lg" :disabled="loading">
+          <span v-if="loading" class="button-spinner" aria-hidden="true"></span>
+          {{ loading ? 'Sending…' : 'Send reset link' }}
+        </button>
       </form>
 
       <form v-else class="form-stack" @submit.prevent="reset">
@@ -75,7 +85,10 @@ async function reset() {
             <button type="button" class="password-toggle" @click="showConfirm = !showConfirm">{{ showConfirm ? 'Hide' : 'Show' }}</button>
           </span>
         </label>
-        <button class="button button-primary button-block button-lg">Update password</button>
+        <button class="button button-primary button-block button-lg" :disabled="loading">
+          <span v-if="loading" class="button-spinner" aria-hidden="true"></span>
+          {{ loading ? 'Updating…' : 'Update password' }}
+        </button>
       </form>
 
       <p class="auth-footer"><RouterLink to="/login">Back to sign in</RouterLink></p>
