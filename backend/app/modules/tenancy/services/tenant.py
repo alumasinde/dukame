@@ -25,7 +25,7 @@ DEFAULT_ROLE_PERMISSIONS = {
 
 
 def slugify(value: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "-", value.strip().lower()).strip("-")[:100]
+    return re.sub(r"[^a-z0-9]", "", value.strip().lower())[:100]
 
 
 async def ensure_default_roles(db: AsyncSession, tenant_id: int) -> TenantRole:
