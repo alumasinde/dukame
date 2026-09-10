@@ -9,7 +9,9 @@ const shopName = ref('')
 const shopSlug = ref('')
 const error = ref('')
 
-const progress = computed(() => (auth.user?.onboarding.total_steps ? 100 / auth.user.onboarding.total_steps : 100))
+const onboarding = computed(() => auth.user?.onboarding ?? null)
+const totalSteps = computed(() => onboarding.value?.total_steps || 1)
+const progress = computed(() => 100 / totalSteps.value)
 
 function suggestSlug() {
   shopSlug.value = shopName.value
@@ -21,6 +23,8 @@ function suggestSlug() {
 }
 
 async function submit() {
+  if (auth.loading) return
+
   error.value = ''
   if (!shopName.value.trim()) {
     error.value = 'Enter your shop name to continue.'
@@ -29,7 +33,7 @@ async function submit() {
 
   try {
     await auth.completeOnboarding(shopName.value.trim(), shopSlug.value || undefined)
-    await router.replace('/dashboard')
+    await router.replace({ name: 'dashboard' })
   } catch (err: any) {
     error.value = err?.response?.data?.detail || err?.response?.data?.message || 'We could not set up your shop. Please try again.'
   }
@@ -43,14 +47,14 @@ async function submit() {
         <span class="brand-mark">D</span>
         <strong>DukaMe</strong>
       </div>
-      <span class="onboarding-step">Step {{ auth.user?.onboarding.current_step ? 1 : 1 }} of {{ auth.user?.onboarding.total_steps || 1 }}</span>
+      <span class="onboarding-step">Step 1 of {{ totalSteps }}</span>
     </header>
 
     <section class="onboarding-shell" aria-labelledby="onboarding-title">
       <div class="onboarding-progress" aria-hidden="true"><span :style="{ width: `${progress}%` }"></span></div>
 
       <div class="onboarding-intro">
-        <span class="badge">Welcome to DukaMe, {{ auth.user?.first_name }}</span>
+        <span class="badge">Welcome to DukaMe{{ auth.user?.first_name ? `, ${auth.user.first_name}` : '' }}</span>
         <h1 id="onboarding-title">Let’s set up your shop.</h1>
         <p>Create the workspace where your products, orders, customers and selling tools will live.</p>
       </div>
@@ -94,7 +98,7 @@ async function submit() {
           <small>Use lowercase letters, numbers and hyphens.</small>
         </label>
 
-        <button class="button button-primary button-block button-lg" :disabled="auth.loading">
+        <button type="submit" class="button button-primary button-block button-lg" :disabled="auth.loading">
           <span v-if="auth.loading" class="button-spinner" aria-hidden="true"></span>
           {{ auth.loading ? 'Setting up your shop…' : 'Continue to my shop' }}
         </button>
