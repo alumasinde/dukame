@@ -3,7 +3,7 @@ from pydantic import BaseModel, EmailStr, Field
 
 class RegisterRequest(BaseModel):
     email: EmailStr
-    password: str = Field(min_length=12, max_length=128)
+    password: str = Field(min_length=8, max_length=128)
     first_name: str = Field(min_length=1, max_length=100)
     last_name: str = Field(min_length=1, max_length=100)
     phone: str | None = Field(default=None, min_length=7, max_length=32)
@@ -45,7 +45,7 @@ class ForgotPasswordRequest(BaseModel):
 
 class ResetPasswordRequest(BaseModel):
     token: str = Field(min_length=32, max_length=512)
-    password: str = Field(min_length=12, max_length=128)
+    password: str = Field(min_length=8, max_length=128)
 
 
 class ResendVerificationRequest(BaseModel):
