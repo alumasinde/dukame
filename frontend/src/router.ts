@@ -13,7 +13,7 @@ const router = createRouter({
       path: '/onboarding',
       name: 'onboarding',
       component: () => import('./views/OnboardingView.vue'),
-      meta: { auth: true, onboarding: true },
+      meta: { auth: true, requiresOnboarding: true },
     },
     {
       path: '/',
@@ -35,18 +35,24 @@ router.beforeEach(async (to) => {
   const auth = useAuthStore()
   await auth.initialize()
 
-  if (to.meta.auth && !auth.isAuthenticated) return { name: 'login' }
-
-  if (auth.isAuthenticated && !auth.onboardingComplete && !to.meta.onboarding) {
-    return { name: 'onboarding', replace: true }
+  // Redirect unauthenticated users to login
+  if (to.meta.auth && !auth.isAuthenticated) {
+    return { name: 'login' }
   }
 
-  if (auth.isAuthenticated && auth.onboardingComplete && to.meta.onboarding) {
+  // Redirect guests (not authenticated) away from public pages
+  if (to.meta.guest && auth.isAuthenticated) {
+    return auth.onboardingComplete ? { name: 'dashboard', replace: true } : { name: 'onboarding', replace: true }
+  }
+
+  // If authenticated and has completed onboarding, but trying to access onboarding page, redirect to dashboard
+  if (auth.isAuthenticated && auth.onboardingComplete && to.meta.requiresOnboarding) {
     return { name: 'dashboard', replace: true }
   }
 
-  if (to.meta.guest && auth.isAuthenticated) {
-    return auth.onboardingComplete ? { name: 'dashboard', replace: true } : { name: 'onboarding', replace: true }
+  // If authenticated but hasn't completed onboarding, and trying to access other authenticated pages, redirect to onboarding
+  if (auth.isAuthenticated && !auth.onboardingComplete && !to.meta.requiresOnboarding && to.meta.auth && to.name !== 'onboarding') {
+    return { name: 'onboarding', replace: true }
   }
 })
 

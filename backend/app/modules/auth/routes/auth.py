@@ -41,20 +41,6 @@ def _token_response(user: User, session: AuthSession, refresh: str) -> TokenResp
     )
 
 
-async def _user_response(db: AsyncSession, user: User) -> UserResponse:
-    onboarding = await get_onboarding_status(db, user.id)
-    return UserResponse(
-        public_id=user.public_id,
-        email=user.email,
-        phone=user.phone,
-        first_name=user.first_name,
-        last_name=user.last_name,
-        is_active=user.is_active,
-        is_verified=user.is_verified,
-        onboarding=onboarding,
-    )
-
-
 def _frontend_url(path: str, token: str) -> str:
     base = settings.frontend_base_url.rstrip("/")
     return f"{base}/{path}?token={token}"
@@ -69,7 +55,22 @@ async def _send_auth_email(to: str, subject: str, body: str) -> None:
             raise
 
 
-@router.post("/register", response_model=UserResponse, status_code=201)
+async def _user_response(user: User, db: AsyncSession) -> UserResponse:
+    """Build a UserResponse with onboarding status."""
+    onboarding = await get_onboarding_status(db, user.id)
+    return UserResponse(
+        public_id=user.public_id,
+        email=user.email,
+        phone=user.phone,
+        first_name=user.first_name,
+        last_name=user.last_name,
+        is_active=user.is_active,
+        is_verified=user.is_verified,
+        onboarding=onboarding,
+    )
+
+
+@router.post("/register", response_model=UserResponse, status_code=201, response_model_exclude_none=False)
 async def register(
     payload: RegisterRequest, db: AsyncSession = Depends(get_db)
 ) -> UserResponse:
@@ -84,7 +85,7 @@ async def register(
         f"Verify your account: {_frontend_url('verify-email', token)}",
     )
     await db.refresh(user)
-    return await _user_response(db, user)
+    return await _user_response(user, db)
 
 
 @router.post("/verify-email", response_model=MessageResponse)
@@ -195,8 +196,8 @@ async def logout_current(
     await db.commit()
 
 
-@router.get("/me", response_model=UserResponse)
+@router.get("/me", response_model=UserResponse, response_model_exclude_none=False)
 async def me(
     user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ) -> UserResponse:
-    return await _user_response(db, user)
+    return await _user_response(user, db)

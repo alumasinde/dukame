@@ -1,10 +1,17 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios'
 
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1'
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1',
+  baseURL: apiBaseUrl,
   timeout: 15000,
   headers: { 'Content-Type': 'application/json' },
 })
+
+// Log API configuration in development
+if (import.meta.env.DEV) {
+  console.log('[DukaMe API] Base URL:', apiBaseUrl)
+}
 
 let refreshPromise: Promise<string | null> | null = null
 
@@ -41,6 +48,15 @@ api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
     const original = error.config as (InternalAxiosRequestConfig & { _retry?: boolean }) | undefined
+
+    // Log network errors in development
+    if (import.meta.env.DEV && !error.response) {
+      console.error('[DukaMe API] Network error:', {
+        message: error.message,
+        code: error.code,
+        config: { baseURL: error.config?.baseURL, url: error.config?.url },
+      })
+    }
 
     // Only retry on 401 with valid refresh token
     if (error.response?.status !== 401 || !original || original._retry || !getRefreshToken()) {

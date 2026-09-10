@@ -16,7 +16,7 @@ export interface User {
   last_name: string
   is_active: boolean
   is_verified: boolean
-  onboarding: OnboardingStatus
+  onboarding: OnboardingStatus | null
 }
 
 export interface Tenant {
@@ -37,7 +37,7 @@ export const useAuthStore = defineStore('auth', {
   }),
   getters: {
     isAuthenticated: (state) => Boolean(getAccessToken() && state.user),
-    onboardingComplete: (state) => Boolean(state.user?.onboarding.completed),
+    onboardingComplete: (state) => state.user?.onboarding?.completed ?? false,
     activeTenant: (state) => state.tenants.find((tenant) => tenant.public_id === state.activeTenantId) || state.tenants[0] || null,
   },
   actions: {
@@ -49,7 +49,8 @@ export const useAuthStore = defineStore('auth', {
       }
       try {
         await this.loadSession()
-      } catch {
+      } catch (err) {
+        console.error('[Auth] Session load failed:', err)
         this.logoutLocal()
       } finally {
         this.initialized = true
@@ -63,15 +64,14 @@ export const useAuthStore = defineStore('auth', {
       this.user = user
       this.tenants = tenants.items
       const stored = sessionStorage.getItem('dukame_tenant_public_id')
-      const preferred = user.onboarding.tenant_public_id || stored
-      const exists = this.tenants.some((tenant) => tenant.public_id === preferred)
-      this.setActiveTenant(exists ? preferred! : this.tenants[0]?.public_id || null)
+      const exists = this.tenants.some((tenant) => tenant.public_id === stored)
+      this.setActiveTenant(exists ? stored! : this.tenants[0]?.public_id || null)
     },
     async validateSession() {
       try {
         const { data: user } = await api.get<User>('/auth/me')
         this.user = user
-      } catch {
+      } catch (err) {
         throw new Error('Session validation failed')
       }
     },
@@ -95,16 +95,11 @@ export const useAuthStore = defineStore('auth', {
       }
     },
     async completeOnboarding(shopName: string, shopSlug?: string) {
-      this.loading = true
-      try {
-        await api.post('/onboarding/shop', {
-          shop_name: shopName,
-          shop_slug: shopSlug || undefined,
-        })
-        await this.loadSession()
-      } finally {
-        this.loading = false
+      const { data } = await api.post('/onboarding/shop', { shop_name: shopName, shop_slug: shopSlug })
+      if (this.user) {
+        this.user.onboarding = data
       }
+      return data
     },
     setActiveTenant(publicId: string | null) {
       this.activeTenantId = publicId
