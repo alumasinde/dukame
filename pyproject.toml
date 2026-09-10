@@ -11,6 +11,7 @@ dependencies = [
   "alembic>=1.15,<2",
   "pydantic-settings>=2.7,<3",
   "redis>=5,<7",
+  "cryptography>=44,<47",
 ]
 
 [dependency-groups]
