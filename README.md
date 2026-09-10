@@ -79,3 +79,4 @@ The test frontend is not the production Vue frontend. It exists to validate API 
 ## Required environment
 
 See `backend/.env.example`. Secrets must not be committed.
+
