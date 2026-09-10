@@ -1,8 +1,10 @@
+from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from starlette.middleware.cors import CORSMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
+from starlette.responses import Response
 
 from app.api.v1.router import api_router
 from app.core.config import settings
@@ -44,14 +46,19 @@ app.add_middleware(RateLimitMiddleware)
 
 
 @app.middleware("http")
-async def security_headers_middleware(request, call_next):
+async def security_headers_middleware(
+    request: Request,
+    call_next: Callable[[Request], Awaitable[Response]],
+) -> Response:
     response = await call_next(request)
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("X-Frame-Options", "DENY")
     response.headers.setdefault("Referrer-Policy", "no-referrer")
     response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
     if settings.is_production:
-        response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+        response.headers.setdefault(
+            "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
+        )
     return response
 
 
