@@ -95,10 +95,14 @@ export const useAuthStore = defineStore('auth', {
       }
     },
     async completeOnboarding(shopName: string, shopSlug?: string) {
-      const { data } = await api.post('/onboarding/shop', { shop_name: shopName, shop_slug: shopSlug })
+      const { data } = await api.post<OnboardingStatus>('/onboarding/shop', {
+        shop_name: shopName,
+        shop_slug: shopSlug,
+      })
       if (this.user) {
         this.user.onboarding = data
       }
+      await this.loadSession()
       return data
     },
     setActiveTenant(publicId: string | null) {
@@ -111,6 +115,7 @@ export const useAuthStore = defineStore('auth', {
       this.user = null
       this.tenants = []
       this.activeTenantId = null
+      sessionStorage.removeItem('dukame_tenant_public_id')
     },
     async logout() {
       try {
