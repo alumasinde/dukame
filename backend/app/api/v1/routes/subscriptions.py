@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.schemas.subscription import PlanResponse, SubscriptionCancelRequest, SubscriptionChangeRequest, SubscriptionResponse
 from app.core.database import get_db
 from app.core.security import get_current_user
-from app.models.identity import User
+from app.models.identity import Tenant, User
 from app.models.subscription import Plan
 from app.services.rbac import require_permission
 from app.services.subscription_v2 import cancel_subscription, change_subscription, get_tenant_subscription, list_active_plans, reactivate_subscription
@@ -19,7 +19,7 @@ def plan_response(plan: Plan) -> PlanResponse:
     return PlanResponse.model_validate(plan, from_attributes=True)
 
 
-async def authorized_tenant(db: AsyncSession, user: User, tenant_public_id: str, permission: str):
+async def authorized_tenant(db: AsyncSession, user: User, tenant_public_id: str, permission: str) -> Tenant:
     tenant = await get_tenant_by_public_id(db, tenant_public_id)
     if tenant is None:
         raise HTTPException(status_code=404, detail="Tenant not found")
