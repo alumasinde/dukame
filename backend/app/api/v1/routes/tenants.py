@@ -6,7 +6,7 @@ from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.identity import User
 from app.services.auth import get_user_tenants
-from app.services.tenant_phase2 import create_tenant
+from app.services.tenant import create_tenant
 
 router = APIRouter(prefix="/tenants", tags=["tenancy"])
 
