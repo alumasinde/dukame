@@ -6,7 +6,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.core.config import settings
 from app.core.time import utc_now
 from app.models.identity import Tenant, TenantUser, User
 from app.models.subscription import Plan, Subscription, SubscriptionEvent
