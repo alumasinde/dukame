@@ -14,7 +14,7 @@ router = APIRouter(prefix="/onboarding", tags=["onboarding"])
 
 
 @router.get("/status", response_model=OnboardingStatus)
-async def status(
+async def get_status(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> OnboardingStatus:
