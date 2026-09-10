@@ -1,6 +1,6 @@
 """identity, tenancy and subscription foundations
 
-Revision ID: 0002_identity_tenancy_subscriptions
+Revision ID: 0002_identity_tenancy_subs
 Revises: 0001_identity
 """
 import uuid
@@ -8,7 +8,7 @@ import uuid
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0002_identity_tenancy_subscriptions"
+revision = "0002_identity_tenancy_subs"
 down_revision = "0001_identity"
 branch_labels = None
 depends_on = None
