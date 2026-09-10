@@ -8,7 +8,7 @@ from app.core.security import get_current_user
 from app.models.identity import User
 from app.models.rbac import Permission
 from app.services.rbac import create_custom_role, get_role, list_roles, replace_role_permissions, role_permissions, require_permission
-from app.services.tenant_phase2 import get_tenant_by_public_id
+from app.services.tenant import get_tenant_by_public_id
 
 router = APIRouter(prefix="/tenants/{tenant_public_id}/roles", tags=["roles"])
 
