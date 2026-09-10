@@ -1,7 +1,7 @@
 import hashlib
 import secrets
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 
 import jwt
 from fastapi import Depends, HTTPException, status
@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import get_db
+from app.core.time import utc_now
 from app.models.identity import AuthSession, User
 
 password_hash = PasswordHash.recommended()
@@ -31,7 +32,7 @@ def token_hash(token: str) -> str:
 
 
 def create_access_token(user: User, session: AuthSession) -> str:
-    now = datetime.now(UTC)
+    now = utc_now()
     expires = now + timedelta(seconds=settings.access_token_ttl_seconds)
     payload = {"sub": user.public_id, "sid": session.public_id, "typ": "access", "iat": now, "exp": expires, "iss": settings.app_name}
     return jwt.encode(payload, settings.jwt_secret.get_secret_value(), algorithm=settings.jwt_algorithm)
@@ -58,7 +59,7 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials | None = De
     public_id, session_id = payload.get("sub"), payload.get("sid")
     if not isinstance(public_id, str) or not isinstance(session_id, str):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid access token")
-    result = await db.execute(select(User).join(AuthSession).where(User.public_id == public_id, AuthSession.public_id == session_id, AuthSession.revoked_at.is_(None), AuthSession.expires_at > datetime.now(UTC), User.is_active.is_(True)))
+    result = await db.execute(select(User).join(AuthSession).where(User.public_id == public_id, AuthSession.public_id == session_id, AuthSession.revoked_at.is_(None), AuthSession.expires_at > utc_now(), User.is_active.is_(True)))
     user = result.scalar_one_or_none()
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session is invalid or expired")
@@ -67,13 +68,13 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials | None = De
 
 def make_session(user: User, user_agent: str | None, ip_address: str | None) -> tuple[AuthSession, str]:
     refresh = new_refresh_token()
-    session = AuthSession(public_id=uuid.uuid4().hex, user_id=user.id, refresh_token_hash=token_hash(refresh), expires_at=datetime.now(UTC) + timedelta(seconds=settings.refresh_token_ttl_seconds), user_agent=user_agent[:512] if user_agent else None, ip_address=ip_address)
+    session = AuthSession(public_id=uuid.uuid4().hex, user_id=user.id, refresh_token_hash=token_hash(refresh), expires_at=utc_now() + timedelta(seconds=settings.refresh_token_ttl_seconds), user_agent=user_agent[:512] if user_agent else None, ip_address=ip_address)
     return session, refresh
 
 
 def revoke_session(session: AuthSession) -> None:
-    session.revoked_at = datetime.now(UTC)
+    session.revoked_at = utc_now()
 
 
 async def revoke_all_user_sessions(db: AsyncSession, user_id: int) -> None:
-    await db.execute(update(AuthSession).where(AuthSession.user_id == user_id, AuthSession.revoked_at.is_(None)).values(revoked_at=datetime.now(UTC)))
+    await db.execute(update(AuthSession).where(AuthSession.user_id == user_id, AuthSession.revoked_at.is_(None)).values(revoked_at=utc_now()))

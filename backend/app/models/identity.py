@@ -22,7 +22,7 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
-    tenants: Mapped[list["Tenant"]] = relationship(secondary="tenant_users", back_populates="users")
+    memberships: Mapped[list["TenantUser"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     sessions: Mapped[list["AuthSession"]] = relationship(back_populates="user", cascade="all, delete-orphan")
 
 
@@ -37,7 +37,6 @@ class Tenant(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
-    users: Mapped[list[User]] = relationship(secondary="tenant_users", back_populates="tenants")
     memberships: Mapped[list["TenantUser"]] = relationship(back_populates="tenant", cascade="all, delete-orphan")
 
 
@@ -51,7 +50,7 @@ class TenantUser(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
     tenant: Mapped[Tenant] = relationship(back_populates="memberships")
-    user: Mapped[User] = relationship()
+    user: Mapped[User] = relationship(back_populates="memberships")
 
     __table_args__ = (Index("ix_tenant_users_user_id", "user_id"), Index("ix_tenant_users_tenant_status", "tenant_id", "status"))
 

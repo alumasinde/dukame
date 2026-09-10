@@ -1,5 +1,4 @@
 import uuid
-from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
@@ -14,6 +13,7 @@ from app.core.security import (
     token_hash,
     verify_password,
 )
+from app.core.time import ensure_utc, utc_now
 from app.models.identity import AuthSession, Tenant, TenantUser, User
 
 
@@ -41,7 +41,7 @@ async def authenticate(db: AsyncSession, email: str, password: str, user_agent: 
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is inactive")
     session, refresh = make_session(user, user_agent, ip_address)
-    user.last_login_at = datetime.now(UTC)
+    user.last_login_at = utc_now()
     db.add(session)
     await db.flush()
     return user, session, refresh
@@ -54,7 +54,7 @@ async def rotate_refresh_token(db: AsyncSession, refresh_token: str, user_agent:
     user = await db.get(User, session.user_id)
     if user is None or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
-    if session.revoked_at is not None or session.expires_at <= datetime.now(UTC):
+    if session.revoked_at is not None or ensure_utc(session.expires_at) <= utc_now():
         await revoke_all_user_sessions(db, user.id)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token is no longer valid")
     revoke_session(session)
