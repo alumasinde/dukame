@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DukaMe API Test Frontend</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <p class="eyebrow">DukaMe</p>
+      <h1>API Test Frontend</h1>
+      <p class="muted">A lightweight browser client for validating the Phase 1 backend before the production Vue frontend is built.</p>
+    </header>
+
+    <section class="card">
+      <label for="apiBase">API base URL</label>
+      <div class="row">
+        <input id="apiBase" value="http://localhost:8000" autocomplete="off">
+        <button id="saveBase">Save</button>
+      </div>
+    </section>
+
+    <section class="grid">
+      <button class="endpoint" data-path="/health">GET /health</button>
+      <button class="endpoint" data-path="/ready">GET /ready</button>
+      <button class="endpoint" data-path="/api/v1">GET /api/v1</button>
+      <button class="endpoint" data-path="/api/v1/health/live">GET /api/v1/health/live</button>
+    </section>
+
+    <section class="card">
+      <div class="result-header">
+        <h2>Response</h2>
+        <span id="status" class="status">Not tested</span>
+      </div>
+      <pre id="output">Choose an endpoint above.</pre>
+    </section>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>

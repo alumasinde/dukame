@@ -32,7 +32,13 @@ class Settings(BaseSettings):
     rate_limit_window_seconds: int = Field(default=60, ge=1)
 
     trusted_hosts: list[str] = Field(default_factory=lambda: ["localhost", "127.0.0.1"])
-    cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000"])
+    cors_origins: list[str] = Field(
+        default_factory=lambda: [
+            "http://localhost:3000",
+            "http://localhost:5500",
+            "http://127.0.0.1:5500",
+        ]
+    )
 
     @field_validator("environment")
     @classmethod

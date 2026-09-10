@@ -32,6 +32,9 @@ jobs:
           --health-interval 5s
           --health-timeout 3s
           --health-retries 20
+    defaults:
+      run:
+        working-directory: backend
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

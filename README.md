@@ -2,6 +2,17 @@
 
 Kenyan-first commerce operating system for small and growing merchants.
 
+## Repository layout
+
+```text
+DukaMe/
+├── backend/        # FastAPI, SQLAlchemy, Alembic, Redis, workers and tests
+├── frontend-test/  # Language-independent browser client for backend testing
+└── .github/        # CI workflows
+```
+
+The production frontend will be built separately. `frontend-test` is intentionally plain HTML/CSS/JavaScript so the backend can be tested without depending on the production frontend framework.
+
 ## Phase 1
 
 Phase 1 establishes the production-oriented application foundation:
@@ -25,23 +36,26 @@ Alembic migrations are the authoritative mechanism for application schema change
 
 HeidiSQL remains useful for inspection, diagnostics, and controlled administration.
 
-## Development
+## Backend development
 
-1. Copy `.env.example` to `.env`.
-2. Set the external MySQL connection values.
-3. Start the Docker services:
+```bash
+cd backend
+copy .env.example .env
+```
+
+Set the external MySQL connection values in `.env`, then start the API and worker:
 
 ```bash
 docker compose -f docker-compose.dev.yml up --build
 ```
 
-4. Run migrations from the API container:
+Run migrations:
 
 ```bash
 docker compose -f docker-compose.dev.yml run --rm api alembic upgrade head
 ```
 
-5. Run the test suite:
+Run tests:
 
 ```bash
 docker compose -f docker-compose.dev.yml run --rm api pytest
@@ -49,6 +63,19 @@ docker compose -f docker-compose.dev.yml run --rm api pytest
 
 The API is exposed on `http://localhost:8000` by default.
 
+## Backend test frontend
+
+The language-independent test frontend is in `frontend-test/`. From the repository root:
+
+```bash
+cd frontend-test
+python -m http.server 5500
+```
+
+Then open `http://localhost:5500` and use the endpoint buttons to verify the backend.
+
+The test frontend is not the production Vue frontend. It exists to validate API connectivity, CORS, health checks and responses before the real frontend is implemented.
+
 ## Required environment
 
-See `.env.example`. Secrets must not be committed.
+See `backend/.env.example`. Secrets must not be committed.
