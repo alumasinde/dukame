@@ -1,6 +1,5 @@
 import uuid
 from collections.abc import Awaitable, Callable
-from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
@@ -28,10 +27,7 @@ def install_exception_handlers(app: FastAPI) -> None:
     ) -> Response:
         request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
         request.state.request_id = request_id
-        try:
-            response = await call_next(request)
-        except Exception:
-            raise
+        response = await call_next(request)
         response.headers["X-Request-ID"] = request_id
         return response
 
