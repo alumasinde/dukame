@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: dukame_test
+          MYSQL_USER: dukame
+          MYSQL_PASSWORD: dukame
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --upgrade pip
+      - run: pip install .
+      - run: pip install pytest pytest-asyncio httpx ruff mypy
+      - name: Ruff
+        run: ruff check .
+      - name: Migration upgrade
+        env:
+          DATABASE_URL: mysql://dukame:dukame@127.0.0.1:3306/dukame_test
+          REDIS_URL: redis://127.0.0.1:6379/0
+          JWT_SECRET: ci-test-secret-change-me
+        run: alembic upgrade head
+      - name: Tests
+        env:
+          DATABASE_URL: mysql://dukame:dukame@127.0.0.1:3306/dukame_test
+          REDIS_URL: redis://127.0.0.1:6379/0
+          JWT_SECRET: ci-test-secret-change-me
+        run: pytest
+      - name: Mypy
+        env:
+          DATABASE_URL: mysql://dukame:dukame@127.0.0.1:3306/dukame_test
+          REDIS_URL: redis://127.0.0.1:6379/0
+          JWT_SECRET: ci-test-secret-change-me
+        run: mypy app
