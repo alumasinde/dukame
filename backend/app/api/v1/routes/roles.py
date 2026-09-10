@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.schemas.rbac import CreateRoleRequest, PermissionResponse, TenantRoleResponse, UpdateRolePermissionsRequest
 from app.core.database import get_db
 from app.core.security import get_current_user
-from app.models.identity import User
+from app.models.identity import Tenant, User
 from app.models.rbac import Permission
 from app.services.rbac import create_custom_role, get_role, list_roles, replace_role_permissions, role_permissions, require_permission
 from app.services.tenant import get_tenant_by_public_id
@@ -13,7 +13,7 @@ from app.services.tenant import get_tenant_by_public_id
 router = APIRouter(prefix="/tenants/{tenant_public_id}/roles", tags=["roles"])
 
 
-async def resolve_tenant(db: AsyncSession, tenant_public_id: str):
+async def resolve_tenant(db: AsyncSession, tenant_public_id: str) -> Tenant:
     tenant = await get_tenant_by_public_id(db, tenant_public_id)
     if tenant is None:
         raise HTTPException(status_code=404, detail="Tenant not found")
