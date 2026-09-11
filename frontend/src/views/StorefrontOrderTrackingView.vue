@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import { getOrderTracking, type OrderTracking } from '../lib/cart'
+import { APP_NAME, APP_MARK } from '../lib/branding'
 
 const route = useRoute()
 const storeSlug = String(route.params.storeSlug)
@@ -55,8 +56,8 @@ onBeforeUnmount(() => {
   <main class="order-tracking-page">
     <header class="order-tracking-header">
       <RouterLink :to="`/${storeSlug}`" class="storefront-brand storefront-brand-link">
-        <span class="storefront-mark">D</span>
-        <div><strong>{{ order?.store_name || 'Store' }}</strong><small>Powered by DukaMe</small></div>
+        <span class="storefront-mark">{{ APP_MARK }}</span>
+        <div><strong>{{ order?.store_name || 'Your store' }}</strong><small>Powered by {{ APP_NAME }}</small></div>
       </RouterLink>
       <RouterLink :to="`/${storeSlug}`" class="order-tracking-shop">Continue shopping</RouterLink>
     </header>
