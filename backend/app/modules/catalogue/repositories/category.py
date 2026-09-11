@@ -1,5 +1,6 @@
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.modules.catalogue.models.category import Category
 
@@ -11,6 +12,7 @@ class CategoryRepository:
     async def list(self, store_id: int, offset: int, limit: int) -> list[Category]:
         result = await self.db.scalars(
             select(Category)
+            .options(selectinload(Category.parent))
             .where(Category.store_id == store_id)
             .order_by(Category.sort_order, Category.name)
             .offset(offset)
@@ -19,7 +21,9 @@ class CategoryRepository:
         return list(result.all())
 
     async def get(self, store_id: int, public_id: str) -> Category | None:
-        return await self.db.scalar(select(Category).where(Category.store_id == store_id, Category.public_id == public_id))
+        return await self.db.scalar(
+            select(Category).options(selectinload(Category.parent)).where(Category.store_id == store_id, Category.public_id == public_id)
+        )
 
     async def get_by_slug(self, store_id: int, slug: str) -> Category | None:
         return await self.db.scalar(select(Category).where(Category.store_id == store_id, Category.slug == slug))
