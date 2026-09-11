@@ -13,7 +13,6 @@ from app.core.config import settings
 from app.modules.auth.models.identity import User
 from app.modules.catalogue.models.option_value import ProductOptionValue
 from app.modules.catalogue.models.product import Product
-from app.modules.catalogue.models.product_media import ProductMedia
 from app.modules.catalogue.models.variant import ProductVariant
 from app.modules.catalogue.models.variant_option_value import ProductVariantOptionValue
 from app.modules.catalogue.models.store import Store
@@ -48,7 +47,7 @@ class CommerceService:
         return cart, raw_token, True
 
     async def read_cart(self, store: Store, token: str | None) -> Cart:
-        cart, raw_token, created = await self.get_or_create_cart(store, token)
+        cart, _, created = await self.get_or_create_cart(store, token)
         if created:
             await self.db.commit()
             cart = await self._load_cart(cart.id)
