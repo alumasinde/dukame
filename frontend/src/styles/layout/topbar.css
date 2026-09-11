@@ -1,0 +1,76 @@
+.topbar {
+  height: 68px;
+  flex: 0 0 68px;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 0 24px;
+  background: rgb(255 255 255 / .96);
+  border-bottom: 1px solid var(--line);
+  backdrop-filter: blur(12px);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.topbar-context {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.topbar-separator {
+  color: #b8c4c1;
+}
+
+.topbar-left strong {
+  font-size: 13px;
+}
+
+.topbar-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.tenant-select select {
+  height: 38px;
+  padding: 0 30px 0 11px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #fff;
+  color: var(--ink);
+  font-size: 12px;
+  box-shadow: var(--shadow-sm);
+}
+
+.topbar-shop-link {
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 13px;
+  border: 1px solid #d7e1de;
+  border-radius: 9px;
+  color: #36534e;
+  background: #fff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.topbar-shop-link:hover {
+  background: #f6faf8;
+  text-decoration: none;
+}
