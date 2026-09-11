@@ -32,10 +32,13 @@ class MpesaClient:
 
     async def _access_token(self) -> str:
         credentials = base64.b64encode(f"{self.consumer_key}:{self.consumer_secret}".encode()).decode()
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.get(f"{self.base_url}/oauth/v1/generate?grant_type=client_credentials", headers={"Authorization": f"Basic {credentials}"})
-            response.raise_for_status()
-            payload = response.json()
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                response = await client.get(f"{self.base_url}/oauth/v1/generate?grant_type=client_credentials", headers={"Authorization": f"Basic {credentials}"})
+                response.raise_for_status()
+                payload = response.json()
+        except (httpx.HTTPError, ValueError) as exc:
+            raise MpesaProviderError("M-Pesa authorization request failed") from exc
         token = payload.get("access_token")
         if not token:
             raise MpesaProviderError("M-Pesa authorization did not return an access token")
@@ -47,30 +50,16 @@ class MpesaClient:
             raise HTTPException(status_code=422, detail="Enter a valid Kenyan M-Pesa phone number")
         timestamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
         password = base64.b64encode(f"{self.shortcode}{self.passkey}{timestamp}".encode()).decode()
-        body = {
-            "BusinessShortCode": self.shortcode,
-            "Password": password,
-            "Timestamp": timestamp,
-            "TransactionType": self.transaction_type,
-            "Amount": max(1, round(amount_minor / 100)),
-            "PartyA": normalized_phone[1:],
-            "PartyB": self.shortcode,
-            "PhoneNumber": normalized_phone[1:],
-            "CallBackURL": self.callback_url,
-            "AccountReference": (account_reference or self.account_reference)[:12],
-            "TransactionDesc": self.transaction_desc[:13],
-        }
+        body = {"BusinessShortCode": self.shortcode, "Password": password, "Timestamp": timestamp, "TransactionType": self.transaction_type, "Amount": max(1, round(amount_minor / 100)), "PartyA": normalized_phone[1:], "PartyB": self.shortcode, "PhoneNumber": normalized_phone[1:], "CallBackURL": self.callback_url, "AccountReference": (account_reference or self.account_reference)[:12], "TransactionDesc": self.transaction_desc[:13]}
         token = await self._access_token()
-        async with httpx.AsyncClient(timeout=20.0) as client:
-            response = await client.post(f"{self.base_url}/mpesa/stkpush/v1/processrequest", json=body, headers={"Authorization": f"Bearer {token}"})
-            response.raise_for_status()
-            payload = response.json()
+        try:
+            async with httpx.AsyncClient(timeout=20.0) as client:
+                response = await client.post(f"{self.base_url}/mpesa/stkpush/v1/processrequest", json=body, headers={"Authorization": f"Bearer {token}"})
+                response.raise_for_status()
+                payload = response.json()
+        except (httpx.HTTPError, ValueError) as exc:
+            raise MpesaProviderError("M-Pesa payment request failed") from exc
         response_code = str(payload.get("ResponseCode", ""))
         if response_code != "0":
             raise MpesaProviderError(str(payload.get("ResponseDescription") or payload.get("errorMessage") or "M-Pesa rejected the payment request"))
-        return {
-            "merchant_request_id": str(payload.get("MerchantRequestID")) if payload.get("MerchantRequestID") else None,
-            "checkout_request_id": str(payload.get("CheckoutRequestID")) if payload.get("CheckoutRequestID") else None,
-            "response_code": response_code,
-            "response_message": str(payload.get("CustomerMessage") or payload.get("ResponseDescription") or "Payment request sent"),
-        }
+        return {"merchant_request_id": str(payload.get("MerchantRequestID")) if payload.get("MerchantRequestID") else None, "checkout_request_id": str(payload.get("CheckoutRequestID")) if payload.get("CheckoutRequestID") else None, "response_code": response_code, "response_message": str(payload.get("CustomerMessage") or payload.get("ResponseDescription") or "Payment request sent")}
