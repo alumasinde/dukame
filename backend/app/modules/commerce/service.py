@@ -22,7 +22,11 @@ from app.modules.commerce.models.cart_item import CartItem
 from app.modules.commerce.models.order import Order
 from app.modules.commerce.models.order_item import OrderItem
 from app.modules.commerce.models.order_status import OrderStatus
+from app.modules.commerce.models.order_status_history import OrderStatusHistory
+from app.modules.commerce.models.order_status_transition import OrderStatusTransition
+from app.modules.commerce.notifications import queue_order_sms
 from app.modules.commerce.schemas import CartItemAdd, CartItemUpdate, CheckoutRequest, OrderStatusUpdate
+from app.modules.commerce.tracking import tracking_token, tracking_token_hash
 
 
 class CommerceService:
@@ -31,7 +35,6 @@ class CommerceService:
 
     @staticmethod
     def _ensure_tz_aware(dt: datetime | None) -> datetime | None:
-        """Ensure datetime is timezone-aware, converting if necessary."""
         if dt is None:
             return None
         return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
@@ -55,8 +58,7 @@ class CommerceService:
         cart, _, created = await self.get_or_create_cart(store, token)
         if created:
             await self.db.commit()
-        cart = await self._load_cart(cart.id)
-        return cart
+        return await self._load_cart(cart.id)
 
     async def add_item(self, store: Store, token: str, payload: CartItemAdd) -> Cart:
         self._ensure_quantity(payload.quantity)
@@ -123,9 +125,13 @@ class CommerceService:
             unit_price = variant.price_minor if variant and variant.price_minor is not None else product.price_minor
             subtotal += unit_price * item.quantity
             snapshots.append((item, product, variant, unit_price))
-        order = Order(public_id=secrets.token_hex(16), store_id=store.id, status_id=initial_status.id, order_number=await self._order_number(), customer_first_name=payload.first_name.strip(), customer_last_name=payload.last_name.strip(), customer_email=payload.email.strip() if payload.email else None, customer_phone=payload.phone.strip(), notes=payload.notes.strip() if payload.notes else None, currency=store.currency, subtotal_minor=subtotal, total_minor=subtotal)
+
+        public_id = secrets.token_hex(16)
+        raw_tracking_token = tracking_token(public_id)
+        order = Order(public_id=public_id, store_id=store.id, status_id=initial_status.id, order_number=await self._order_number(), tracking_token_hash=tracking_token_hash(raw_tracking_token), customer_first_name=payload.first_name.strip(), customer_last_name=payload.last_name.strip(), customer_email=payload.email.strip() if payload.email else None, customer_phone=payload.phone.strip(), notes=payload.notes.strip() if payload.notes else None, currency=store.currency, subtotal_minor=subtotal, total_minor=subtotal)
         self.db.add(order)
         await self.db.flush()
+        self.db.add(OrderStatusHistory(order_id=order.id, status_id=initial_status.id, source="customer"))
         for item, product, variant, unit_price in snapshots:
             label = None
             sku = product.sku
@@ -136,11 +142,12 @@ class CommerceService:
             inventory_owner = variant or product
             if inventory_owner.inventory_tracking:
                 inventory_owner.inventory_quantity -= item.quantity
+        await queue_order_sms(self.db, order, initial_status, store.name, store.slug)
         cart.checked_out_at = datetime.now(UTC)
         await self.db.commit()
         return await self._load_order(order.id)
 
-    async def list_orders(self, user: User, tenant_public_id: str, offset: int, limit: int, status_public_id: str | None):
+    async def list_orders(self, user: User, tenant_public_id: str, offset: int, limit: int, status_public_id: str | None) -> list[Order]:
         store = await resolve_store(self.db, user, tenant_public_id, "orders.read")
         stmt = select(Order).options(selectinload(Order.status), selectinload(Order.items).selectinload(OrderItem.product), selectinload(Order.items).selectinload(OrderItem.variant)).where(Order.store_id == store.id).order_by(Order.created_at.desc(), Order.id.desc()).offset(offset).limit(limit)
         if status_public_id:
@@ -156,7 +163,7 @@ class CommerceService:
 
     async def update_order_status(self, user: User, tenant_public_id: str, public_id: str, payload: OrderStatusUpdate) -> Order:
         store = await resolve_store(self.db, user, tenant_public_id, "orders.status.manage")
-        order = await self._load_order_by_public_id(store.id, public_id)
+        order = await self._load_order_by_public_id(store.id, public_id, lock=True)
         if order is None:
             raise HTTPException(status_code=404, detail="Order not found")
         if order.status.is_terminal:
@@ -164,13 +171,52 @@ class CommerceService:
         status = await self.db.scalar(select(OrderStatus).where(OrderStatus.public_id == payload.status_public_id, OrderStatus.is_active.is_(True)))
         if status is None:
             raise HTTPException(status_code=422, detail="Order status not found")
+        if status.id == order.status_id:
+            raise HTTPException(status_code=409, detail="Order is already in this status")
+        transition = await self.db.scalar(select(OrderStatusTransition).where(OrderStatusTransition.from_status_id == order.status_id, OrderStatusTransition.to_status_id == status.id))
+        if transition is None:
+            raise HTTPException(status_code=409, detail=f"Order cannot move from {order.status.name} to {status.name}")
         order.status_id = status.id
+        self.db.add(OrderStatusHistory(order_id=order.id, status_id=status.id, actor_user_id=user.id, source="merchant"))
+        await queue_order_sms(self.db, order, status, store.name, store.slug)
         await self.db.commit()
         return await self._load_order(order.id)
 
-    async def list_statuses(self, user: User, tenant_public_id: str):
+    async def list_statuses(self, user: User, tenant_public_id: str) -> list[OrderStatus]:
         await resolve_store(self.db, user, tenant_public_id, "orders.read")
         return list((await self.db.scalars(select(OrderStatus).where(OrderStatus.is_active.is_(True)).order_by(OrderStatus.sort_order, OrderStatus.id))).all())
+
+    async def list_next_statuses(self, user: User, tenant_public_id: str, public_id: str) -> list[OrderStatus]:
+        store = await resolve_store(self.db, user, tenant_public_id, "orders.read")
+        order = await self._load_order_by_public_id(store.id, public_id)
+        if order is None:
+            raise HTTPException(status_code=404, detail="Order not found")
+        if order.status.is_terminal:
+            return []
+        stmt = select(OrderStatus).join(OrderStatusTransition, OrderStatusTransition.to_status_id == OrderStatus.id).where(OrderStatusTransition.from_status_id == order.status_id, OrderStatus.is_active.is_(True)).order_by(OrderStatus.sort_order, OrderStatus.id)
+        return list((await self.db.scalars(stmt)).all())
+
+    async def get_public_order(self, store: Store, token: str) -> Order:
+        parts = token.split(".", 1)
+        if len(parts) != 2 or not parts[0]:
+            raise HTTPException(status_code=404, detail="Order not found")
+        public_id = parts[0]
+        expected_token = tracking_token(public_id)
+        if not secrets.compare_digest(expected_token, token):
+            raise HTTPException(status_code=404, detail="Order not found")
+        order = await self.db.scalar(
+            select(Order)
+            .options(
+                selectinload(Order.status),
+                selectinload(Order.items).selectinload(OrderItem.product),
+                selectinload(Order.items).selectinload(OrderItem.variant),
+                selectinload(Order.status_history).selectinload(OrderStatusHistory.status),
+            )
+            .where(Order.store_id == store.id, Order.public_id == public_id)
+        )
+        if order is None:
+            raise HTTPException(status_code=404, detail="Order not found")
+        return order
 
     async def _require_cart(self, store_id: int, token: str) -> Cart:
         cart = await self._cart_by_token(store_id, token, lock=True)
@@ -229,8 +275,11 @@ class CommerceService:
     async def _load_order(self, order_id: int) -> Order:
         return await self.db.scalar(select(Order).options(selectinload(Order.status), selectinload(Order.items).selectinload(OrderItem.product), selectinload(Order.items).selectinload(OrderItem.variant)).where(Order.id == order_id))
 
-    async def _load_order_by_public_id(self, store_id: int, public_id: str) -> Order | None:
-        return await self.db.scalar(select(Order).options(selectinload(Order.status), selectinload(Order.items).selectinload(OrderItem.product), selectinload(Order.items).selectinload(OrderItem.variant)).where(Order.store_id == store_id, Order.public_id == public_id))
+    async def _load_order_by_public_id(self, store_id: int, public_id: str, lock: bool = False) -> Order | None:
+        stmt = select(Order).options(selectinload(Order.status), selectinload(Order.items).selectinload(OrderItem.product), selectinload(Order.items).selectinload(OrderItem.variant)).where(Order.store_id == store_id, Order.public_id == public_id)
+        if lock:
+            stmt = stmt.with_for_update()
+        return await self.db.scalar(stmt)
 
     async def _order_number(self) -> str:
         for _ in range(8):
