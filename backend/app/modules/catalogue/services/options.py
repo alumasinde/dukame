@@ -55,11 +55,13 @@ class OptionService:
         option = await self.options.get(store.id, public_id)
         if option is None:
             raise HTTPException(status_code=404, detail="Option not found")
+        if await self.values.count_option_variant_links(option.id):
+            raise HTTPException(status_code=409, detail="This option is used by product variants and cannot be deleted")
         await self.options.delete(option)
         await self.db.commit()
 
     async def add_value(self, user: User, tenant_public_id: str, option_public_id: str, payload: OptionValueCreate):
-        store = await resolve_store(self.db, user, tenant_public_id, "catalogue.manage")
+        store = await resolve_store(self.db, tenant_public_id, "catalogue.manage")
         option = await self.options.get(store.id, option_public_id)
         if option is None:
             raise HTTPException(status_code=404, detail="Option not found")
@@ -101,5 +103,7 @@ class OptionService:
         value = await self.values.get(option.id, value_public_id)
         if value is None:
             raise HTTPException(status_code=404, detail="Option value not found")
+        if await self.values.count_variant_links(value.id):
+            raise HTTPException(status_code=409, detail="This option value is used by product variants and cannot be deleted")
         await self.values.delete(value)
         await self.db.commit()
