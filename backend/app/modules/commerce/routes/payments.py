@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.modules.auth.models.identity import User
 from app.modules.auth.security import get_current_user
+from app.modules.catalogue.services.context import resolve_store
 from app.modules.commerce.payment_service import PaymentService, payment_list_response, payment_response
 from app.modules.commerce.schemas import PaymentListItemResponse, PaymentMethodCreate, PaymentMethodResponse, PaymentMethodUpdate, PaymentResponse
 from app.modules.storefront.routes import get_active_store
@@ -75,12 +76,8 @@ async def mpesa_callback(callback_token: str, payload: dict[str, Any], db: Async
 
 @router.get("/tenants/{tenant_public_id}/orders/{order_public_id}/payment", response_model=PaymentResponse)
 async def get_order_payment(tenant_public_id: str, order_public_id: str, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> PaymentResponse:
-    store = await PaymentService(db).get_payment(user, tenant_public_id, "") if False else None
-    if store is not None:
-        raise HTTPException(status_code=404, detail="Payment not found")
-    from app.modules.catalogue.services.context import resolve_store
-    resolved_store = await resolve_store(db, user, tenant_public_id, "payments.read")
-    payment = await PaymentService(db).get_order_payment(resolved_store, order_public_id)
+    store = await resolve_store(db, user, tenant_public_id, "payments.read")
+    payment = await PaymentService(db).get_order_payment(store, order_public_id)
     if payment is None:
         raise HTTPException(status_code=404, detail="Payment not found")
     return PaymentResponse.model_validate(payment_response(payment))
