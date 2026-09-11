@@ -15,29 +15,42 @@ from app.modules.auth.security import get_current_user
 from app.modules.catalogue.services.context import resolve_store
 from app.modules.commerce.models.payment import Payment
 from app.modules.commerce.models.payment_method import PaymentMethod
+from app.modules.commerce.payment_security import decrypt_config, encrypt_config
 from app.modules.commerce.payment_service import PaymentService, payment_list_response, payment_response
 from app.modules.commerce.schemas import PaymentListItemResponse, PaymentMethodCreate, PaymentMethodResponse, PaymentMethodUpdate, PaymentResponse
+from app.modules.commerce.mpesa import MpesaClient, MpesaProviderError
 from app.modules.storefront.routes import get_active_store
 
 router = APIRouter(tags=["payments"])
 
 
-def method_response(method: PaymentMethod, callback_url: str | None = None, callback_token: str | None = None) -> PaymentMethodResponse:
+def method_response(method: PaymentMethod, callback_url: str | None = None, callback_token: str | None = None, merchant: bool = False) -> PaymentMethodResponse:
     display_code = "mpesa" if method.code == "mpesa_paybill" else method.code
-    return PaymentMethodResponse(public_id=method.public_id, code=display_code, name=method.name, is_enabled=method.is_enabled, instructions=method.instructions, callback_url=callback_url, callback_token=callback_token)
+    payment_type = None
+    if method.code in {"mpesa", "mpesa_paybill"} and method.config_encrypted:
+        config = decrypt_config(method.config_encrypted)
+        payment_type = str(config.get("payment_type") or ("stk_push" if method.code == "mpesa" else "paybill"))
+    return PaymentMethodResponse(public_id=method.public_id, code=display_code, name=method.name, is_enabled=method.is_enabled, payment_type=payment_type, instructions=method.instructions, callback_url=callback_url if merchant else None, callback_token=callback_token if merchant else None)
 
 
 @router.get("/storefront/{store_slug}/payment-methods", response_model=list[PaymentMethodResponse])
 async def list_storefront_payment_methods(store_slug: str, db: AsyncSession = Depends(get_db)) -> list[PaymentMethodResponse]:
     store = await get_active_store(db, store_slug)
-    methods = await PaymentService(db).list_public_methods(store)
-    return [method_response(item) for item in methods]
+    return [method_response(item) for item in await PaymentService(db).list_public_methods(store)]
 
 
 @router.get("/tenants/{tenant_public_id}/payment-methods", response_model=list[PaymentMethodResponse])
 async def list_payment_methods(tenant_public_id: str, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> list[PaymentMethodResponse]:
     methods = await PaymentService(db).list_methods(user, tenant_public_id)
-    return [method_response(item) for item in methods]
+    responses = []
+    for item in methods:
+        callback_url = callback_token = None
+        if item.code == "mpesa" and item.config_encrypted:
+            callback_token = decrypt_config(item.config_encrypted).get("callback_token")
+            if callback_token:
+                callback_url = PaymentService._callback_url(callback_token)
+        responses.append(method_response(item, callback_url, callback_token, merchant=True))
+    return responses
 
 
 @router.post("/tenants/{tenant_public_id}/payment-methods", response_model=PaymentMethodResponse)
@@ -47,27 +60,24 @@ async def create_payment_method(tenant_public_id: str, payload: PaymentMethodCre
     if normalized_code == "mpesa_paybill":
         config = payload.config or {}
         payment_type = str(config.get("payment_type", "paybill")).strip().lower()
-        number = str(config.get("paybill_number", "")).strip()
+        number = str(config.get("paybill_number", config.get("till_number", ""))).strip()
         if payment_type not in {"paybill", "till"}:
             raise HTTPException(status_code=422, detail="Choose Paybill or Till Number")
         if not number.isdigit() or not 5 <= len(number) <= 8:
             raise HTTPException(status_code=422, detail=f"Enter a valid M-Pesa {'Paybill' if payment_type == 'paybill' else 'Till Number'}")
         if await db.scalar(select(PaymentMethod.id).where(PaymentMethod.store_id == store.id, PaymentMethod.code == normalized_code)):
             raise HTTPException(status_code=409, detail="M-Pesa payment is already configured")
-        from app.modules.commerce.payment_security import encrypt_config
         account_mode = str(config.get("account_mode", "order_number")).strip()
         account_reference = str(config.get("account_reference", "")).strip()
         if payment_type == "paybill" and account_mode not in {"order_number", "customer_reference", "fixed"}:
             raise HTTPException(status_code=422, detail="Invalid Paybill account mode")
         if payment_type == "till":
-            account_mode = "none"
-            account_reference = ""
+            account_mode, account_reference = "none", ""
         if payment_type == "paybill" and account_mode == "fixed" and not account_reference:
             raise HTTPException(status_code=422, detail="Enter the fixed account reference")
         label = "M-Pesa Paybill" if payment_type == "paybill" else "M-Pesa Till"
-        default_instructions = f"Pay via M-Pesa Paybill {number}. Use your DukaMe order number as the account reference." if payment_type == "paybill" else f"Pay via M-Pesa Buy Goods and Services using Till Number {number}."
-        instructions = payload.instructions.strip() if payload.instructions else default_instructions
-        encrypted = encrypt_config({"payment_type": payment_type, "paybill_number": number, "account_mode": account_mode, "account_reference": account_reference})
+        instructions = payload.instructions.strip() if payload.instructions else (f"Pay via M-Pesa Paybill {number}. Use your DukaMe order number as the account reference." if payment_type == "paybill" else f"Pay via M-Pesa Buy Goods and Services using Till Number {number}.")
+        encrypted = encrypt_config({"payment_type": payment_type, "paybill_number": number if payment_type == "paybill" else "", "till_number": number if payment_type == "till" else "", "account_mode": account_mode, "account_reference": account_reference})
         method = PaymentMethod(public_id=secrets.token_hex(16), store_id=store.id, code=normalized_code, name=payload.name.strip() or label, is_enabled=payload.is_enabled, sort_order=20, instructions=instructions, config_encrypted=encrypted)
         db.add(method)
         await db.commit()
@@ -80,7 +90,7 @@ async def create_payment_method(tenant_public_id: str, payload: PaymentMethodCre
         await db.commit()
         return method_response(method)
     method, callback_token, callback_url = await PaymentService(db).create_method(user, tenant_public_id, payload.code, payload.name, payload.instructions, payload.is_enabled, payload.config)
-    return method_response(method, callback_url, callback_token)
+    return method_response(method, callback_url, callback_token, merchant=True)
 
 
 @router.patch("/tenants/{tenant_public_id}/payment-methods/{method_public_id}", response_model=PaymentMethodResponse)
@@ -90,7 +100,6 @@ async def update_payment_method(tenant_public_id: str, method_public_id: str, pa
     if method is None:
         raise HTTPException(status_code=404, detail="Payment method not found")
     if method.code == "mpesa_paybill":
-        from app.modules.commerce.payment_security import decrypt_config, encrypt_config
         current = decrypt_config(method.config_encrypted)
         if payload.name is not None:
             method.name = payload.name.strip()
@@ -101,7 +110,7 @@ async def update_payment_method(tenant_public_id: str, method_public_id: str, pa
         if payload.config is not None:
             merged = {**current, **payload.config}
             payment_type = str(merged.get("payment_type", "paybill")).strip().lower()
-            number = str(merged.get("paybill_number", "")).strip()
+            number = str(merged.get("paybill_number", merged.get("till_number", ""))).strip()
             if payment_type not in {"paybill", "till"}:
                 raise HTTPException(status_code=422, detail="Choose Paybill or Till Number")
             if not number.isdigit() or not 5 <= len(number) <= 8:
@@ -109,18 +118,37 @@ async def update_payment_method(tenant_public_id: str, method_public_id: str, pa
             account_mode = str(merged.get("account_mode", "order_number"))
             account_reference = str(merged.get("account_reference", "")).strip()
             if payment_type == "till":
-                account_mode = "none"
-                account_reference = ""
+                account_mode, account_reference = "none", ""
             elif account_mode not in {"order_number", "customer_reference", "fixed"}:
                 raise HTTPException(status_code=422, detail="Invalid Paybill account mode")
             if payment_type == "paybill" and account_mode == "fixed" and not account_reference:
                 raise HTTPException(status_code=422, detail="Enter the fixed account reference")
-            merged.update({"payment_type": payment_type, "paybill_number": number, "account_mode": account_mode, "account_reference": account_reference})
+            merged.update({"payment_type": payment_type, "paybill_number": number if payment_type == "paybill" else "", "till_number": number if payment_type == "till" else "", "account_mode": account_mode, "account_reference": account_reference})
             method.config_encrypted = encrypt_config(merged)
         await db.commit()
         return method_response(method)
     method, callback_url = await PaymentService(db).update_method(user, tenant_public_id, method_public_id, payload.name, payload.instructions, payload.is_enabled, payload.config)
-    return method_response(method, callback_url)
+    return method_response(method, callback_url, None, merchant=True)
+
+
+@router.post("/tenants/{tenant_public_id}/payment-methods/{method_public_id}/test", response_model=dict[str, str])
+async def test_payment_method(tenant_public_id: str, method_public_id: str, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> dict[str, str]:
+    store = await resolve_store(db, user, tenant_public_id, "payments.manage")
+    method = await db.scalar(select(PaymentMethod).where(PaymentMethod.store_id == store.id, PaymentMethod.public_id == method_public_id))
+    if method is None or method.store_id != store.id:
+        raise HTTPException(status_code=404, detail="Payment method not found")
+    if method.code != "mpesa":
+        raise HTTPException(status_code=422, detail="Only Daraja M-Pesa can be connection-tested")
+    config = decrypt_config(method.config_encrypted)
+    callback_token = config.get("callback_token")
+    if not callback_token:
+        raise HTTPException(status_code=503, detail="M-Pesa callback is not configured")
+    try:
+        await MpesaClient(config, PaymentService._callback_url(callback_token))._access_token()
+    except (MpesaProviderError, HTTPException) as exc:
+        detail = exc.detail if isinstance(exc, HTTPException) else str(exc)
+        raise HTTPException(status_code=502, detail=f"M-Pesa connection failed: {detail}") from exc
+    return {"status": "ok", "message": f"M-Pesa Daraja {config.get('environment', 'sandbox')} connection is working."}
 
 
 @router.get("/tenants/{tenant_public_id}/payments", response_model=list[PaymentListItemResponse])
