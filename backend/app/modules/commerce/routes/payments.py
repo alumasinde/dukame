@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.modules.auth.models.identity import User
 from app.modules.auth.security import get_current_user
+from app.modules.catalogue.models.payment_method import PaymentMethod
 from app.modules.catalogue.services.context import resolve_store
 from app.modules.commerce.payment_service import PaymentService, payment_list_response, payment_response
 from app.modules.commerce.schemas import PaymentListItemResponse, PaymentMethodCreate, PaymentMethodResponse, PaymentMethodUpdate, PaymentResponse
@@ -16,7 +17,7 @@ from app.modules.storefront.routes import get_active_store
 router = APIRouter(tags=["payments"])
 
 
-def method_response(method, callback_url: str | None = None, callback_token: str | None = None) -> PaymentMethodResponse:
+def method_response(method: PaymentMethod, callback_url: str | None = None, callback_token: str | None = None) -> PaymentMethodResponse:
     return PaymentMethodResponse(public_id=method.public_id, code=method.code, name=method.name, is_enabled=method.is_enabled, instructions=method.instructions, callback_url=callback_url, callback_token=callback_token)
 
 
