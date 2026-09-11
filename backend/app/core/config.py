@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     refresh_token_ttl_seconds: int = Field(default=2592000, ge=3600, le=31536000)
     refresh_token_bytes: int = Field(default=32, ge=32, le=128)
     default_plan_slug: str = "free"
+    media_root: str = "uploads"
+    media_max_bytes: int = Field(default=5 * 1024 * 1024, ge=1024, le=25 * 1024 * 1024)
     trusted_hosts: list[str] = Field(default_factory=lambda: ["localhost", "127.0.0.1", "dukamedev.local"])
     cors_origins: list[str] = Field(
         default_factory=lambda: [
