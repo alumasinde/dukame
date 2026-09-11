@@ -3,7 +3,7 @@
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0014_order_tracking_hash_compatibility"
+revision = "0014_tracking_hash_compat"
 down_revision = "0013_order_tracking_workflow"
 branch_labels = None
 depends_on = None
