@@ -4,7 +4,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import get_db
+from app.modules.catalogue.models.product import ProductVariant
 from app.modules.catalogue.models.store import Store
+from app.modules.commerce.models.cart import Cart
+from app.modules.commerce.models.order import Order
 from app.modules.commerce.models.order_status_history import OrderStatusHistory
 from app.modules.commerce.schemas import CartItemAdd, CartItemUpdate, CartResponse, CheckoutRequest, OrderResponse, OrderStatusHistoryResponse, OrderStatusResponse, OrderTrackingResponse
 from app.modules.commerce.service import CommerceService
@@ -21,14 +24,14 @@ async def get_store(db: AsyncSession, slug: str) -> Store:
     return store
 
 
-def variant_label(variant) -> str | None:
+def variant_label(variant: ProductVariant | None) -> str | None:
     if not variant:
         return None
     labels = [f"{link.option_value.option.name}: {link.option_value.name}" for link in variant.option_value_links if link.option_value and link.option_value.option]
     return ", ".join(labels) or None
 
 
-def cart_response(cart) -> CartResponse:
+def cart_response(cart: Cart) -> CartResponse:
     items = []
     for item in cart.items:
         image_url = next((media.url for media in item.product.media if media.status == "active" and media.media_type == "image"), None)
@@ -40,41 +43,12 @@ def empty_cart(currency: str) -> CartResponse:
     return CartResponse(public_id="", currency=currency, items=[], item_count=0, subtotal_minor=0)
 
 
-def order_response(order, include_tracking: bool = False, store_slug: str | None = None, store_name: str | None = None) -> OrderResponse:
-    return OrderResponse(
-        public_id=order.public_id,
-        order_number=order.order_number,
-        status=OrderStatusResponse(public_id=order.status.public_id, code=order.status.code, name=order.status.name, description=order.status.description, sort_order=order.status.sort_order, is_terminal=order.status.is_terminal),
-        store_name=store_name,
-        customer_first_name=order.customer_first_name,
-        customer_last_name=order.customer_last_name,
-        customer_email=order.customer_email,
-        customer_phone=order.customer_phone,
-        notes=order.notes,
-        currency=order.currency,
-        subtotal_minor=order.subtotal_minor,
-        total_minor=order.total_minor,
-        items=[{"public_id": item.public_id, "product_public_id": item.product.public_id if item.product else "", "variant_public_id": item.variant.public_id if item.variant else None, "product_name": item.product_name, "variant_label": item.variant_label, "sku": item.sku, "quantity": item.quantity, "unit_price_minor": item.unit_price_minor, "line_total_minor": item.line_total_minor} for item in order.items],
-        created_at=order.created_at.isoformat(),
-        tracking_url=tracking_url(store_slug, make_tracking_token(order.public_id)) if include_tracking and store_slug else None,
-    )
+def order_response(order: Order, include_tracking: bool = False, store_slug: str | None = None, store_name: str | None = None) -> OrderResponse:
+    return OrderResponse(public_id=order.public_id, order_number=order.order_number, status=OrderStatusResponse(public_id=order.status.public_id, code=order.status.code, name=order.status.name, description=order.status.description, sort_order=order.status.sort_order, is_terminal=order.status.is_terminal), store_name=store_name, customer_first_name=order.customer_first_name, customer_last_name=order.customer_last_name, customer_email=order.customer_email, customer_phone=order.customer_phone, notes=order.notes, currency=order.currency, subtotal_minor=order.subtotal_minor, total_minor=order.total_minor, items=[{"public_id": item.public_id, "product_public_id": item.product.public_id if item.product else "", "variant_public_id": item.variant.public_id if item.variant else None, "product_name": item.product_name, "variant_label": item.variant_label, "sku": item.sku, "quantity": item.quantity, "unit_price_minor": item.unit_price_minor, "line_total_minor": item.line_total_minor} for item in order.items], created_at=order.created_at.isoformat(), tracking_url=tracking_url(store_slug, make_tracking_token(order.public_id)) if include_tracking and store_slug else None)
 
 
-def tracking_response(order, store: Store) -> OrderTrackingResponse:
-    return OrderTrackingResponse(
-        store_name=store.name,
-        order_number=order.order_number,
-        status=OrderStatusResponse(public_id=order.status.public_id, code=order.status.code, name=order.status.name, description=order.status.description, sort_order=order.status.sort_order, is_terminal=order.status.is_terminal),
-        status_history=[OrderStatusHistoryResponse(status=OrderStatusResponse(public_id=item.status.public_id, code=item.status.code, name=item.status.name, description=item.status.description, sort_order=item.status.sort_order, is_terminal=item.status.is_terminal), source=item.source, created_at=item.created_at.isoformat()) for item in order.status_history],
-        customer_first_name=order.customer_first_name,
-        currency=order.currency,
-        subtotal_minor=order.subtotal_minor,
-        total_minor=order.total_minor,
-        items=[{"public_id": item.public_id, "product_public_id": item.product.public_id if item.product else "", "variant_public_id": item.variant.public_id if item.variant else None, "product_name": item.product_name, "variant_label": item.variant_label, "sku": item.sku, "quantity": item.quantity, "unit_price_minor": item.unit_price_minor, "line_total_minor": item.line_total_minor} for item in order.items],
-        created_at=order.created_at.isoformat(),
-        updated_at=order.updated_at.isoformat(),
-        tracking_url=tracking_url(store.slug, make_tracking_token(order.public_id)),
-    )
+def tracking_response(order: Order, store: Store) -> OrderTrackingResponse:
+    return OrderTrackingResponse(store_name=store.name, order_number=order.order_number, status=OrderStatusResponse(public_id=order.status.public_id, code=order.status.code, name=order.status.name, description=order.status.description, sort_order=order.status.sort_order, is_terminal=order.status.is_terminal), status_history=[OrderStatusHistoryResponse(status=OrderStatusResponse(public_id=item.status.public_id, code=item.status.code, name=item.status.name, description=item.status.description, sort_order=item.status.sort_order, is_terminal=item.status.is_terminal), source=item.source, created_at=item.created_at.isoformat()) for item in order.status_history], customer_first_name=order.customer_first_name, currency=order.currency, subtotal_minor=order.subtotal_minor, total_minor=order.total_minor, items=[{"public_id": item.public_id, "product_public_id": item.product.public_id if item.product else "", "variant_public_id": item.variant.public_id if item.variant else None, "product_name": item.product_name, "variant_label": item.variant_label, "sku": item.sku, "quantity": item.quantity, "unit_price_minor": item.unit_price_minor, "line_total_minor": item.line_total_minor} for item in order.items], created_at=order.created_at.isoformat(), updated_at=order.updated_at.isoformat(), tracking_url=tracking_url(store.slug, make_tracking_token(order.public_id)))
 
 
 def set_cart_cookie(response: Response, store: Store, token: str) -> None:
