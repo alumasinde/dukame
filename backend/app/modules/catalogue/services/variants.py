@@ -27,12 +27,13 @@ class VariantService:
     async def create(self, user: User, tenant_public_id: str, product_public_id: str, payload: VariantCreate):
         store = await resolve_store(self.db, user, tenant_public_id, "catalogue.manage")
         product = await self._product(store.id, product_public_id)
-        await self._validate_values(store.id, payload.option_value_public_ids)
+        values = await self._validate_values(store.id, payload.option_value_public_ids)
         self._validate_prices(product, payload.price_minor, payload.compare_at_price_minor)
+        await self._ensure_unique_combination(product.id, {value.id for value in values})
         if payload.sku and await self.variants.get_by_sku(store.id, payload.sku):
             raise HTTPException(status_code=409, detail="Variant SKU already exists")
         try:
-            variant = await self.variants.create(public_id=uuid.uuid4().hex, product_id=product.id, **payload.model_dump(exclude={"option_value_public_ids"}))
+            variant = await self.variants.create(public_id=uuid.uuid4().hex, store_id=store.id, product_id=product.id, **payload.model_dump(exclude={"option_value_public_ids"}))
             await self._replace_values(variant.id, payload.option_value_public_ids)
             await self.db.commit()
         except IntegrityError:
@@ -49,7 +50,8 @@ class VariantService:
         values = payload.model_dump(exclude_unset=True)
         option_ids = values.pop("option_value_public_ids", None)
         if option_ids is not None:
-            await self._validate_values(store.id, option_ids)
+            option_values = await self._validate_values(store.id, option_ids)
+            await self._ensure_unique_combination(product.id, {value.id for value in option_values}, variant.id)
         if "sku" in values and values["sku"] and values["sku"] != variant.sku and await self.variants.get_by_sku(store.id, values["sku"]):
             raise HTTPException(status_code=409, detail="Variant SKU already exists")
         self._validate_prices(product, values.get("price_minor", variant.price_minor), values.get("compare_at_price_minor", variant.compare_at_price_minor))
@@ -84,17 +86,22 @@ class VariantService:
             raise HTTPException(status_code=422, detail="A variant cannot use the same option value twice")
         if not public_ids:
             return []
-        result = await self.db.scalars(
-            select(ProductOptionValue)
-            .join(ProductOptionValue.option)
-            .where(ProductOptionValue.public_id.in_(public_ids), ProductOptionValue.option.has(store_id=store_id))
-        )
+        result = await self.db.scalars(select(ProductOptionValue).join(ProductOptionValue.option).where(ProductOptionValue.public_id.in_(public_ids), ProductOptionValue.option.has(store_id=store_id)))
         values = list(result.all())
         if len(values) != len(public_ids):
             raise HTTPException(status_code=422, detail="One or more option values were not found in this store")
         if len({value.option_id for value in values}) != len(values):
             raise HTTPException(status_code=422, detail="A variant can contain only one value for each option")
         return values
+
+    async def _ensure_unique_combination(self, product_id: int, option_value_ids: set[int], exclude_variant_id: int | None = None) -> None:
+        variants = await self.variants.list(product_id)
+        for variant in variants:
+            if exclude_variant_id and variant.id == exclude_variant_id:
+                continue
+            existing = {link.option_value_id for link in variant.option_value_links}
+            if existing == option_value_ids:
+                raise HTTPException(status_code=409, detail="A variant with this option combination already exists")
 
     async def _replace_values(self, variant_id: int, public_ids: list[str]) -> None:
         await self.db.execute(delete(ProductVariantOptionValue).where(ProductVariantOptionValue.variant_id == variant_id))
