@@ -2,15 +2,18 @@ import { api } from './api'
 
 export interface CartItem { public_id: string; product_public_id: string; product_name: string; product_slug: string; variant_public_id: string | null; variant_label: string | null; sku: string | null; image_url: string | null; quantity: number; unit_price_minor: number; line_total_minor: number; currency: string }
 export interface Cart { public_id: string; currency: string; items: CartItem[]; item_count: number; subtotal_minor: number }
-export interface CheckoutPayload { first_name: string; last_name: string; phone: string; email?: string; notes?: string }
+export interface PaymentMethod { public_id: string; code: string; name: string; instructions?: string | null }
+export interface Payment { public_id: string; status: string; amount_minor: number; currency: string; method: PaymentMethod; failure_reason?: string | null; paid_at?: string | null; provider_reference?: string | null }
+export interface CheckoutPayload { first_name: string; last_name: string; phone: string; email?: string; notes?: string; payment_method_public_id?: string }
 export interface OrderStatus { public_id: string; code: string; name: string; description: string | null; sort_order: number; is_terminal: boolean }
 export interface OrderStatusHistory { status: OrderStatus; source: string; created_at: string }
 export interface OrderItem { public_id: string; product_public_id: string; variant_public_id: string | null; product_name: string; variant_label: string | null; sku: string | null; quantity: number; unit_price_minor: number; line_total_minor: number }
-export interface Order { public_id: string; order_number: string; status: OrderStatus; store_name?: string | null; customer_first_name: string; customer_last_name: string; customer_email: string | null; customer_phone: string; notes: string | null; currency: string; subtotal_minor: number; total_minor: number; items: OrderItem[]; created_at: string; tracking_url?: string | null }
-export interface OrderTracking { store_name: string; order_number: string; status: OrderStatus; status_history: OrderStatusHistory[]; customer_first_name: string; currency: string; subtotal_minor: number; total_minor: number; items: OrderItem[]; created_at: string; updated_at: string; tracking_url: string }
+export interface Order { public_id: string; order_number: string; status: OrderStatus; store_name?: string | null; customer_first_name: string; customer_last_name: string; customer_email: string | null; customer_phone: string; notes: string | null; currency: string; subtotal_minor: number; total_minor: number; items: OrderItem[]; created_at: string; tracking_url?: string | null; payment?: Payment | null }
+export interface OrderTracking { store_name: string; order_number: string; status: OrderStatus; status_history: OrderStatusHistory[]; customer_first_name: string; currency: string; subtotal_minor: number; total_minor: number; items: OrderItem[]; created_at: string; updated_at: string; tracking_url: string; payment?: Payment | null }
 
 function path(storeSlug: string, suffix = '') { return `/storefront/${encodeURIComponent(storeSlug)}${suffix}` }
 export function getCart(storeSlug: string) { return api.get<Cart>(path(storeSlug, '/cart')) }
+export function getPaymentMethods(storeSlug: string) { return api.get<PaymentMethod[]>(path(storeSlug, '/payment-methods')) }
 export function addCartItem(storeSlug: string, productPublicId: string, quantity: number, variantPublicId?: string | null) { return api.post<Cart>(path(storeSlug, '/cart/items'), { product_public_id: productPublicId, variant_public_id: variantPublicId || undefined, quantity }) }
 export function updateCartItem(storeSlug: string, itemPublicId: string, quantity: number) { return api.patch<Cart>(path(storeSlug, `/cart/items/${encodeURIComponent(itemPublicId)}`), { quantity }) }
 export function removeCartItem(storeSlug: string, itemPublicId: string) { return api.delete<Cart>(path(storeSlug, `/cart/items/${encodeURIComponent(itemPublicId)}`)) }
