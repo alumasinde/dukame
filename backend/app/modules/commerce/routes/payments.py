@@ -7,6 +7,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
 from app.modules.auth.models.identity import User
@@ -53,10 +54,9 @@ async def create_payment_method(tenant_public_id: str, payload: PaymentMethodCre
             raise HTTPException(status_code=422, detail="Invalid Paybill account mode")
         if await db.scalar(select(PaymentMethod.id).where(PaymentMethod.store_id == store.id, PaymentMethod.code == normalized_code)):
             raise HTTPException(status_code=409, detail="M-Pesa Paybill is already configured")
-        instructions = payload.instructions.strip() if payload.instructions else f"Pay via M-Pesa Paybill {paybill}. Use your DukaMe order number as the account reference."
-        method = PaymentMethod(public_id=secrets.token_hex(16), store_id=store.id, code=normalized_code, name=payload.name.strip() or "M-Pesa", is_enabled=payload.is_enabled, sort_order=20, instructions=instructions, config_encrypted=PaymentService.__dict__["_encrypt_manual_config"](config) if False else None)
         from app.modules.commerce.payment_security import encrypt_config
-        method.config_encrypted = encrypt_config({"paybill_number": paybill, "account_mode": account_mode, "account_reference": str(config.get("account_reference", "")).strip()})
+        instructions = payload.instructions.strip() if payload.instructions else f"Pay via M-Pesa Paybill {paybill}. Use your DukaMe order number as the account reference."
+        method = PaymentMethod(public_id=secrets.token_hex(16), store_id=store.id, code=normalized_code, name=payload.name.strip() or "M-Pesa", is_enabled=payload.is_enabled, sort_order=20, instructions=instructions, config_encrypted=encrypt_config({"paybill_number": paybill, "account_mode": account_mode, "account_reference": str(config.get("account_reference", "")).strip()}))
         db.add(method)
         await db.commit()
         return method_response(method)
@@ -127,7 +127,7 @@ async def mark_cash_payment_paid(tenant_public_id: str, payment_public_id: str, 
 @router.patch("/tenants/{tenant_public_id}/payments/{payment_public_id}/manual-paid", response_model=PaymentResponse)
 async def mark_manual_payment_paid(tenant_public_id: str, payment_public_id: str, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> PaymentResponse:
     store = await resolve_store(db, user, tenant_public_id, "payments.manage")
-    payment = await db.scalar(select(Payment).where(Payment.public_id == payment_public_id, Payment.store_id == store.id))
+    payment = await db.scalar(select(Payment).options(selectinload(Payment.payment_method)).where(Payment.public_id == payment_public_id, Payment.store_id == store.id))
     if payment is None:
         raise HTTPException(status_code=404, detail="Payment not found")
     if payment.payment_method.code not in {"cash", "card", "mpesa_paybill"}:
