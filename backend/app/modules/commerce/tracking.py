@@ -7,11 +7,7 @@ from app.core.config import settings
 
 
 def tracking_token(public_id: str) -> str:
-    signature = hmac.new(
-        settings.jwt_secret.get_secret_value().encode("utf-8"),
-        public_id.encode("utf-8"),
-        hashlib.sha256,
-    ).hexdigest()
+    signature = hmac.new(settings.tracking_signing_key.encode("utf-8"), public_id.encode("utf-8"), hashlib.sha256).hexdigest()
     return f"{public_id}.{signature}"
 
 
@@ -20,8 +16,7 @@ def tracking_token_hash(token: str) -> str:
 
 
 def verify_tracking_token(public_id: str, token: str) -> bool:
-    expected = tracking_token(public_id)
-    return hmac.compare_digest(expected, token)
+    return hmac.compare_digest(tracking_token(public_id), token)
 
 
 def tracking_url(store_slug: str, token: str) -> str:
