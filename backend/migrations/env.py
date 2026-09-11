@@ -12,6 +12,7 @@ from app.modules.auth.models.tokens import PasswordResetToken, VerificationToken
 from app.modules.catalogue.models import Category, Product, ProductMedia, ProductOption, ProductOptionValue, ProductVariant, ProductVariantOptionValue, Store  # noqa: F401
 from app.modules.rbac.models.rbac import Permission, TenantRole, TenantRolePermission  # noqa: F401
 from app.modules.subscriptions.models.subscription import Plan, PlanFeature, Subscription, SubscriptionEvent  # noqa: F401
+from app.modules.tenancy.models.business_type import BusinessType  # noqa: F401
 from app.modules.tenancy.models.tenant import Tenant, TenantUser  # noqa: F401
 
 config = context.config
