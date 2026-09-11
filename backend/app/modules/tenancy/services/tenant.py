@@ -50,7 +50,13 @@ async def ensure_default_roles(db: AsyncSession, tenant_id: int) -> TenantRole:
     return by_slug["owner"]
 
 
-async def create_tenant(db: AsyncSession, user: User, name: str, slug: str | None) -> tuple[Tenant, Subscription]:
+async def create_tenant(
+    db: AsyncSession,
+    user: User,
+    name: str,
+    slug: str | None,
+    business_type_id: int | None = None,
+) -> tuple[Tenant, Subscription]:
     tenant_slug = slugify(slug or name)
     if len(tenant_slug) < 3:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="A valid business name or link is required")
@@ -61,18 +67,11 @@ async def create_tenant(db: AsyncSession, user: User, name: str, slug: str | Non
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Default subscription plan is unavailable")
 
     business_name = name.strip()
-    tenant = Tenant(public_id=uuid.uuid4().hex, name=business_name, slug=tenant_slug)
+    tenant = Tenant(public_id=uuid.uuid4().hex, name=business_name, slug=tenant_slug, business_type_id=business_type_id)
     db.add(tenant)
     await db.flush()
 
-    store = Store(
-        public_id=uuid.uuid4().hex,
-        tenant_id=tenant.id,
-        name=business_name,
-        slug=tenant_slug,
-        status="active",
-        currency="KES",
-    )
+    store = Store(public_id=uuid.uuid4().hex, tenant_id=tenant.id, name=business_name, slug=tenant_slug, status="active", currency="KES")
     db.add(store)
     await db.flush()
 
