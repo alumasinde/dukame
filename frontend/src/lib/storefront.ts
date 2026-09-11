@@ -29,6 +29,8 @@ export interface StorefrontProduct {
   price_minor: number
   compare_at_price_minor: number | null
   currency: string
+  inventory_tracking: boolean
+  inventory_quantity: number
   category: StorefrontCategory | null
   media: StorefrontMedia[]
   variants: StorefrontVariant[]
