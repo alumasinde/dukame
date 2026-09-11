@@ -22,8 +22,6 @@ from app.modules.commerce.models.payment_method import PaymentMethod
 from app.modules.commerce.mpesa import MpesaClient, MpesaProviderError
 from app.modules.commerce.payment_security import callback_token_hash, decrypt_config, encrypt_config, new_callback_token
 
-PAYMENT_STATUSES = {"pending", "processing", "paid", "failed", "cancelled", "refunded", "partially_refunded"}
-
 
 def payment_response(payment: Payment) -> dict[str, object]:
     return {
@@ -63,10 +61,10 @@ class PaymentService:
         if payment.payment_method.code != "mpesa":
             raise HTTPException(status_code=422, detail="This payment method is not supported yet")
         config = decrypt_config(payment.payment_method.config_encrypted)
-        callback_hash = payment.payment_method.callback_token_hash
-        if not callback_hash:
+        callback_token = config.get("callback_token")
+        if not callback_token or not payment.payment_method.callback_token_hash:
             raise HTTPException(status_code=503, detail="M-Pesa callback is not configured")
-        callback_url = f"{settings.public_api_base_url.rstrip('/')}/api/v1/payments/mpesa/callback/{callback_hash}"
+        callback_url = f"{settings.public_api_base_url.rstrip('/')}/api/v1/payments/mpesa/callback/{callback_token}"
         client = MpesaClient(config, callback_url)
         attempt_number = (await self.db.scalar(select(PaymentAttempt.attempt_number).where(PaymentAttempt.payment_id == payment.id).order_by(PaymentAttempt.attempt_number.desc()).limit(1)) or 0) + 1
         attempt = PaymentAttempt(public_id=secrets.token_hex(16), payment_id=payment.id, attempt_number=attempt_number, status="processing", phone=payment.customer_phone, amount_minor=payment.amount_minor)
@@ -109,14 +107,14 @@ class PaymentService:
         callback_url = None
         callback_token = None
         encrypted = None
+        callback_hash = None
         if normalized_code == "mpesa":
             if not config:
                 raise HTTPException(status_code=422, detail="M-Pesa configuration is required")
             callback_token, callback_hash = new_callback_token()
-            encrypted = encrypt_config(config)
+            stored_config = {**config, "callback_token": callback_token}
+            encrypted = encrypt_config(stored_config)
             callback_url = f"{settings.public_api_base_url.rstrip('/')}/api/v1/payments/mpesa/callback/{callback_token}"
-        else:
-            callback_hash = None
         method = PaymentMethod(public_id=secrets.token_hex(16), store_id=store.id, code=normalized_code, name=name.strip(), is_enabled=enabled, sort_order=20, instructions=instructions.strip() if instructions else None, config_encrypted=encrypted, callback_token_hash=callback_hash)
         self.db.add(method)
         await self.db.commit()
@@ -155,8 +153,7 @@ class PaymentService:
         event_key = f"mpesa:stk:{checkout_request_id}:{result_code}"
         if await self.db.scalar(select(PaymentEvent.id).where(PaymentEvent.event_key == event_key)):
             return
-        event = PaymentEvent(public_id=secrets.token_hex(16), payment_id=attempt.payment.id, event_key=event_key, event_type="mpesa.stk.callback", payload_hash=payload_hash, processed_at=datetime.now(UTC))
-        self.db.add(event)
+        self.db.add(PaymentEvent(public_id=secrets.token_hex(16), payment_id=attempt.payment.id, event_key=event_key, event_type="mpesa.stk.callback", payload_hash=payload_hash, processed_at=datetime.now(UTC)))
         if result_code == "0":
             metadata = {str(item.get("Name")): item.get("Value") for item in callback.get("CallbackMetadata", {}).get("Item", []) if item.get("Name")}
             amount = metadata.get("Amount")
