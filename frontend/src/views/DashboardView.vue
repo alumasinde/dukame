@@ -1,102 +1,109 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
-import { api } from '../lib/api'
+import { getOrders, getPayments, type Order, type PaymentListItem } from '../lib/cart'
 import { useAuthStore } from '../stores/auth'
 
 const auth = useAuthStore()
 const loading = ref(true)
 const error = ref('')
-const subscription = ref<any>(null)
-
-const activeTenant = computed(() => auth.activeTenant)
+const orders = ref<Order[]>([])
+const payments = ref<PaymentListItem[]>([])
+const tenant = computed(() => auth.activeTenant)
 const firstName = computed(() => auth.user?.first_name || 'there')
-const roleLabel = computed(() => activeTenant.value?.role || 'Member')
-const shopInitial = computed(() => activeTenant.value?.name?.charAt(0).toUpperCase() || 'D')
-
+const currency = computed(() => payments.value[0]?.currency || orders.value[0]?.currency || 'KES')
+const paidPayments = computed(() => payments.value.filter(p => p.status === 'paid'))
+const revenueMinor = computed(() => paidPayments.value.reduce((sum, p) => sum + p.amount_minor, 0))
+const pendingPayments = computed(() => payments.value.filter(p => ['pending', 'processing'].includes(p.status)).length)
+const averageOrderMinor = computed(() => paidPayments.value.length ? Math.round(revenueMinor.value / paidPayments.value.length) : 0)
+const pendingOrders = computed(() => orders.value.filter(o => !o.status.is_terminal).length)
+const recentOrders = computed(() => orders.value.slice(0, 7))
+const paymentMix = computed(() => {
+  const map = new Map<string, { name: string; count: number; amount: number }>()
+  for (const payment of payments.value) {
+    const current = map.get(payment.method.code) || { name: payment.method.name, count: 0, amount: 0 }
+    current.count += 1
+    if (payment.status === 'paid') current.amount += payment.amount_minor
+    map.set(payment.method.code, current)
+  }
+  return [...map.values()].sort((a, b) => b.amount - a.amount)
+})
+function money(minor: number) { return new Intl.NumberFormat('en-KE', { style: 'currency', currency: currency.value, maximumFractionDigits: 0 }).format((minor || 0) / 100) }
+function statusClass(status: string) { return `status-${status}` }
 async function load() {
-  if (!activeTenant.value) {
-    loading.value = false
-    return
-  }
-  loading.value = true
-  error.value = ''
+  if (!tenant.value) { loading.value = false; return }
+  loading.value = true; error.value = ''
   try {
-    const { data } = await api.get(`/subscriptions/${activeTenant.value.public_id}`)
-    subscription.value = data
-  } catch (err: any) {
-    error.value = err?.response?.data?.detail || 'Subscription details could not be loaded.'
-  } finally {
-    loading.value = false
-  }
+    const [ordersResponse, paymentsResponse] = await Promise.all([getOrders(tenant.value.public_id, { limit: 100 }), getPayments(tenant.value.public_id, { limit: 100 })])
+    orders.value = ordersResponse.data
+    payments.value = paymentsResponse.data
+  } catch (err: any) { error.value = err?.response?.data?.detail || 'Dashboard data could not be loaded.' }
+  finally { loading.value = false }
 }
-
 onMounted(load)
 </script>
 
 <template>
   <div class="page-stack">
-    <div v-if="!activeTenant" class="welcome-row">
-      <div>
-        <span class="eyebrow">Get started</span>
-        <h2>Create your business</h2>
-        <p class="lead">Set up your business once, then start adding products.</p>
-      </div>
-      <RouterLink to="/shops" class="button button-primary">Create business</RouterLink>
-    </div>
-
-    <template v-else>
+    <template v-if="tenant">
       <div class="welcome-row">
-        <div>
-          <span class="eyebrow">Overview</span>
-          <h2>Good day, {{ firstName }}.</h2>
-          <p class="lead">Here is what is happening with {{ activeTenant.name }}.</p>
-        </div>
-        <RouterLink to="/catalogue/products/new" class="button button-primary"><i class="fa-solid fa-plus" aria-hidden="true"></i> Add product</RouterLink>
+        <div><span class="eyebrow">Store overview</span><h2>Good day, {{ firstName }}.</h2><p class="lead">A live view of sales, orders and payments for {{ tenant.name }}.</p></div>
+        <div style="display:flex;gap:8px"><RouterLink to="/payments" class="button button-secondary">Payments</RouterLink><RouterLink to="/catalogue/products/new" class="button button-primary">+ Add product</RouterLink></div>
       </div>
-
       <div v-if="error" class="alert alert-warning">{{ error }}</div>
-
-      <div class="stat-grid">
-        <div class="stat-card"><span class="stat-label">Business</span><strong>{{ activeTenant.name }}</strong><span class="stat-note">{{ activeTenant.slug }}</span></div>
-        <div class="stat-card"><span class="stat-label">Catalogue</span><strong>Ready to build</strong><span class="stat-note">Products, categories and variants</span></div>
-        <div class="stat-card"><span class="stat-label">Role</span><strong class="text-capitalize">{{ roleLabel }}</strong><span class="stat-note">Your access level</span></div>
-        <div class="stat-card accent-stat"><span class="stat-label">Plan</span><strong>{{ loading ? 'Loading…' : subscription?.plan?.name || 'Free' }}</strong><span class="stat-note">{{ subscription?.status || 'Active' }}</span></div>
-      </div>
-
-      <div class="dashboard-grid dashboard-foundation-grid">
-        <section class="panel panel-large">
-          <div class="panel-heading"><div><span class="eyebrow">Getting started</span><h3>Set up your shop</h3><p>Add the basics before you start taking orders.</p></div></div>
-          <div class="steps">
-            <div class="step done"><span><i class="fa-solid fa-check" aria-hidden="true"></i></span><div><strong>Business created</strong><small>Your shop is ready to configure.</small></div></div>
-            <div class="step"><span>2</span><div><strong>Build your catalogue</strong><small>Add products and organise them with categories and options.</small></div><RouterLink to="/catalogue/products">Open catalogue →</RouterLink></div>
-            <div class="step"><span>3</span><div><strong>Set up your shop</strong><small>Add the details customers will see.</small></div><RouterLink to="/shops">Manage shop →</RouterLink></div>
-            <div class="step"><span>4</span><div><strong>Start selling</strong><small>Orders, customers and payments will follow as you sell.</small></div></div>
-          </div>
-        </section>
-
-        <section class="panel">
-          <div class="panel-heading"><div><span class="eyebrow">Shortcuts</span><h3>Quick actions</h3></div></div>
-          <div class="quick-actions">
-            <RouterLink to="/catalogue/products/new" class="quick-action"><b><i class="fa-solid fa-box" aria-hidden="true"></i></b><span><strong>Add product</strong><small>Create a product for your catalogue</small></span></RouterLink>
-            <RouterLink to="/catalogue/categories" class="quick-action"><b><i class="fa-solid fa-layer-group" aria-hidden="true"></i></b><span><strong>Categories</strong><small>Organise your products</small></span></RouterLink>
-            <RouterLink to="/shops" class="quick-action"><b><i class="fa-solid fa-store" aria-hidden="true"></i></b><span><strong>Shop settings</strong><small>Update your shop details</small></span></RouterLink>
-            <RouterLink to="/team" class="quick-action"><b><i class="fa-solid fa-users" aria-hidden="true"></i></b><span><strong>Team</strong><small>Manage members and access</small></span></RouterLink>
-          </div>
-        </section>
-      </div>
-
-      <section class="panel dashboard-next-panel">
-        <div class="panel-heading"><div><span class="eyebrow">Your business</span><h3>Commerce operations</h3><p>More tools will become part of the workflow as you grow.</p></div></div>
-        <div class="dashboard-module-grid">
-          <RouterLink to="/orders" class="dashboard-module"><span><i class="fa-solid fa-receipt" aria-hidden="true"></i></span><strong>Orders</strong><small>Manage sales</small></RouterLink>
-          <RouterLink to="/customers" class="dashboard-module"><span><i class="fa-solid fa-users" aria-hidden="true"></i></span><strong>Customers</strong><small>Customer records</small></RouterLink>
-          <RouterLink to="/payments" class="dashboard-module"><span><i class="fa-solid fa-credit-card" aria-hidden="true"></i></span><strong>Payments</strong><small>Payment activity</small></RouterLink>
-          <RouterLink to="/analytics" class="dashboard-module"><span><i class="fa-solid fa-chart-line" aria-hidden="true"></i></span><strong>Analytics</strong><small>Business performance</small></RouterLink>
+      <div v-if="loading" class="commerce-state"><div class="status-spinner" /><p>Loading your store performance…</p></div>
+      <template v-else>
+        <div class="stat-grid">
+          <div class="stat-card accent-stat"><span class="stat-label">Paid revenue</span><strong>{{ money(revenueMinor) }}</strong><span class="stat-note">From {{ paidPayments.length }} paid payment{{ paidPayments.length === 1 ? '' : 's' }}</span></div>
+          <div class="stat-card"><span class="stat-label">Orders</span><strong>{{ orders.length }}</strong><span class="stat-note">{{ pendingOrders }} active</span></div>
+          <div class="stat-card"><span class="stat-label">Average order</span><strong>{{ money(averageOrderMinor) }}</strong><span class="stat-note">Based on paid payments</span></div>
+          <div class="stat-card"><span class="stat-label">Awaiting payment</span><strong>{{ pendingPayments }}</strong><span class="stat-note">Pending or processing</span></div>
         </div>
-      </section>
-    </template>
 
-    <section v-if="!activeTenant" class="empty-state"><div class="empty-illustration">{{ shopInitial }}</div><h3>Create your first business</h3><p>Once it is created, your shop and workspace are ready automatically.</p><RouterLink to="/shops" class="button button-primary">Create business</RouterLink></section>
+        <div class="dashboard-grid">
+          <section class="panel panel-large">
+            <div class="panel-heading"><div><span class="eyebrow">Sales activity</span><h3>Recent orders</h3><p>Your latest store activity.</p></div><RouterLink to="/orders">View all →</RouterLink></div>
+            <div v-if="!recentOrders.length" class="commerce-state"><p>No orders yet. Add products and start selling.</p></div>
+            <div v-else class="dashboard-order-list">
+              <RouterLink v-for="order in recentOrders" :key="order.public_id" :to="`/orders`" class="dashboard-order-row">
+                <span class="dashboard-order-icon"><i class="fa-solid fa-receipt" aria-hidden="true"></i></span>
+                <span class="dashboard-order-main"><strong>#{{ order.order_number }}</strong><small>{{ order.customer_first_name }} {{ order.customer_last_name }} · {{ order.items.reduce((sum, item) => sum + item.quantity, 0) }} item{{ order.items.reduce((sum, item) => sum + item.quantity, 0) === 1 ? '' : 's' }}</small></span>
+                <span class="dashboard-order-total">{{ money(order.total_minor) }}</span>
+                <span class="dashboard-order-status" :class="statusClass(order.status.code)">{{ order.status.name }}</span>
+              </RouterLink>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-heading"><div><span class="eyebrow">Payments</span><h3>Payment mix</h3><p>How customers are paying.</p></div><RouterLink to="/payments">Manage →</RouterLink></div>
+            <div v-if="!paymentMix.length" class="commerce-state"><p>No payment activity yet.</p></div>
+            <div v-else class="dashboard-payment-list">
+              <div v-for="item in paymentMix" :key="item.name" class="dashboard-payment-row"><span class="dashboard-payment-icon"><i class="fa-solid fa-credit-card" aria-hidden="true"></i></span><div><strong>{{ item.name }}</strong><small>{{ item.count }} transaction{{ item.count === 1 ? '' : 's' }}</small></div><b>{{ money(item.amount) }}</b></div>
+            </div>
+          </section>
+        </div>
+
+        <div class="dashboard-grid">
+          <section class="panel">
+            <div class="panel-heading"><div><span class="eyebrow">Run your store</span><h3>Quick actions</h3></div></div>
+            <div class="quick-actions">
+              <RouterLink to="/catalogue/products/new" class="quick-action"><b><i class="fa-solid fa-box" aria-hidden="true"></i></b><span><strong>Add product</strong><small>Grow your catalogue</small></span></RouterLink>
+              <RouterLink to="/orders" class="quick-action"><b><i class="fa-solid fa-receipt" aria-hidden="true"></i></b><span><strong>Manage orders</strong><small>Process customer orders</small></span></RouterLink>
+              <RouterLink to="/payments" class="quick-action"><b><i class="fa-solid fa-credit-card" aria-hidden="true"></i></b><span><strong>Review payments</strong><small>Check payment status</small></span></RouterLink>
+              <RouterLink to="/settings" class="quick-action"><b><i class="fa-solid fa-gear" aria-hidden="true"></i></b><span><strong>Store settings</strong><small>Configure your workspace</small></span></RouterLink>
+            </div>
+          </section>
+          <section class="panel">
+            <div class="panel-heading"><div><span class="eyebrow">Store health</span><h3>Next actions</h3></div></div>
+            <div class="steps">
+              <div class="step"><span>1</span><div><strong>Keep your catalogue current</strong><small>Prices, stock and product information drive checkout accuracy.</small></div><RouterLink to="/catalogue/products">Products →</RouterLink></div>
+              <div class="step"><span>2</span><div><strong>Configure payments</strong><small>Enable the payment methods your customers can use.</small></div><RouterLink to="/settings">Settings →</RouterLink></div>
+              <div class="step"><span>3</span><div><strong>Process new orders</strong><small>Move orders through your configured workflow.</small></div><RouterLink to="/orders">Orders →</RouterLink></div>
+            </div>
+          </section>
+        </div>
+      </template>
+    </template>
+    <section v-else class="empty-state"><h3>Create your first business</h3><p>Set up your business to start managing products, orders and payments.</p><RouterLink to="/shops" class="button button-primary">Create business</RouterLink></section>
   </div>
 </template>
