@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class ProductCreate(BaseModel):
@@ -19,6 +19,12 @@ class ProductCreate(BaseModel):
     def normalize_currency(cls, value: str) -> str:
         return value.upper()
 
+    @model_validator(mode="after")
+    def validate_compare_price(self):
+        if self.compare_at_price_minor is not None and self.compare_at_price_minor < self.price_minor:
+            raise ValueError("compare_at_price_minor must be greater than or equal to price_minor")
+        return self
+
 
 class ProductUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=2, max_length=255)
@@ -37,6 +43,12 @@ class ProductUpdate(BaseModel):
     @classmethod
     def normalize_currency(cls, value: str | None) -> str | None:
         return value.upper() if value else value
+
+    @model_validator(mode="after")
+    def validate_compare_price(self):
+        if self.price_minor is not None and self.compare_at_price_minor is not None and self.compare_at_price_minor < self.price_minor:
+            raise ValueError("compare_at_price_minor must be greater than or equal to price_minor")
+        return self
 
 
 class ProductResponse(BaseModel):
