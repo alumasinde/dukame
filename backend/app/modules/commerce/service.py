@@ -167,7 +167,7 @@ class CommerceService:
         if order is None:
             raise HTTPException(status_code=404, detail="Order not found")
         if order.status.is_terminal:
-            raise HTTPException(status_code=409, detail="A completed or cancelled order cannot be changed")
+            raise HTTPException(status_code=409, detail="An order in a final status cannot be changed")
         status = await self.db.scalar(select(OrderStatus).where(OrderStatus.public_id == payload.status_public_id, OrderStatus.is_active.is_(True)))
         if status is None:
             raise HTTPException(status_code=422, detail="Order status not found")
@@ -215,6 +215,8 @@ class CommerceService:
             .where(Order.store_id == store.id, Order.public_id == public_id)
         )
         if order is None:
+            raise HTTPException(status_code=404, detail="Order not found")
+        if order.tracking_token_hash is not None and not secrets.compare_digest(order.tracking_token_hash, tracking_token_hash(token)):
             raise HTTPException(status_code=404, detail="Order not found")
         return order
 
