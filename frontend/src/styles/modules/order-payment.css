@@ -1,0 +1,4 @@
+.order-payment-panel { display: grid; gap: 8px; margin: 14px 0; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: #f8fbfa; }
+.order-payment-panel > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.order-payment-panel span { color: var(--muted); font-size: 10px; }
+.order-payment-panel strong { font-size: 11px; text-transform: capitalize; }
