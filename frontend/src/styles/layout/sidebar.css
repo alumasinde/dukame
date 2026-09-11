@@ -7,6 +7,7 @@
   background: #102a27;
   color: #dce9e7;
   display: flex;
+  transition: width .2s ease;
 }
 
 .sidebar-content {
@@ -17,6 +18,38 @@
   padding: 18px 14px 14px;
   display: flex;
   flex-direction: column;
+}
+
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.sidebar-header .logo {
+  flex: 1;
+  min-width: 0;
+  padding-bottom: 10px;
+}
+
+.sidebar-toggle {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #31554f;
+  border-radius: 9px;
+  background: #173a35;
+  color: #b8d0cc;
+  transition: background .15s ease, color .15s ease, border-color .15s ease;
+}
+
+.sidebar-toggle:hover {
+  background: #1d463f;
+  border-color: #3b6860;
+  color: #fff;
 }
 
 .mobile-menu-btn {
@@ -38,6 +71,7 @@
 .logo-icon {
   width: 36px;
   height: 36px;
+  flex: 0 0 36px;
   display: grid;
   place-items: center;
   border-radius: 10px;
@@ -215,4 +249,126 @@
   padding: 12px 10px 2px;
   color: #5f7e79;
   font-size: 9px;
+}
+
+.sidebar.collapsed .sidebar-header {
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sidebar.collapsed .sidebar-header .logo {
+  flex: 0 0 auto;
+  justify-content: center;
+  padding: 4px 0 0;
+}
+
+.sidebar.collapsed .sidebar-toggle {
+  width: 100%;
+  flex-basis: 34px;
+}
+
+.sidebar.collapsed .logo-text,
+.sidebar.collapsed .shop-details,
+.sidebar.collapsed .shop-chevron,
+.sidebar.collapsed .nav-label,
+.sidebar.collapsed .nav-link span,
+.sidebar.collapsed .group-chevron,
+.sidebar.collapsed .subnav,
+.sidebar.collapsed .logout-btn span,
+.sidebar.collapsed .sidebar-footer {
+  display: none;
+}
+
+.sidebar.collapsed .shop-info {
+  justify-content: center;
+  padding: 8px;
+  margin-bottom: 16px;
+}
+
+.sidebar.collapsed .nav-link,
+.sidebar.collapsed .logout-btn {
+  justify-content: center;
+  padding-inline: 0;
+}
+
+.sidebar.collapsed .nav-link.active {
+  box-shadow: none;
+}
+
+@media (max-width: 800px) {
+  .sidebar {
+    width: 100%;
+    min-width: 0;
+    height: auto;
+    position: fixed;
+    top: 0;
+    left: 0;
+    background: transparent;
+    pointer-events: none;
+  }
+
+  .sidebar-header {
+    display: none;
+  }
+
+  .mobile-menu-btn {
+    display: grid;
+    place-items: center;
+    position: absolute;
+    top: 13px;
+    right: 14px;
+    width: 42px;
+    height: 42px;
+    border: 1px solid #31554f;
+    border-radius: 10px;
+    background: #102a27;
+    color: #fff;
+    pointer-events: auto;
+    z-index: 2;
+  }
+
+  .sidebar-content {
+    display: none;
+    width: min(310px,88vw);
+    height: 100vh;
+    padding-top: 16px;
+    pointer-events: auto;
+    box-shadow: 20px 0 50px rgb(15 37 34 / .2);
+  }
+
+  .sidebar-content.open {
+    display: flex;
+  }
+
+  .sidebar.collapsed .logo-text,
+  .sidebar.collapsed .shop-details,
+  .sidebar.collapsed .shop-chevron,
+  .sidebar.collapsed .nav-label,
+  .sidebar.collapsed .nav-link span,
+  .sidebar.collapsed .group-chevron,
+  .sidebar.collapsed .subnav,
+  .sidebar.collapsed .logout-btn span,
+  .sidebar.collapsed .sidebar-footer {
+    display: initial;
+  }
+
+  .sidebar.collapsed .shop-info {
+    justify-content: initial;
+    padding: 11px;
+    margin-bottom: 22px;
+  }
+
+  .sidebar.collapsed .nav-link,
+  .sidebar.collapsed .logout-btn {
+    justify-content: initial;
+    padding-inline: 11px;
+  }
+
+  .sidebar.collapsed .nav-link.active {
+    box-shadow: inset 3px 0 0 #18b7a6;
+  }
+
+  .sidebar.collapsed .sidebar-header {
+    display: none;
+  }
 }
