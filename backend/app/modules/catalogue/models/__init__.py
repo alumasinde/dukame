@@ -8,7 +8,6 @@ from app.modules.catalogue.models.variant import ProductVariant
 from app.modules.catalogue.models.variant_option_value import ProductVariantOptionValue
 
 __all__ = [
-    "Store",
     "Category",
     "Product",
     "ProductMedia",
@@ -16,4 +15,5 @@ __all__ = [
     "ProductOptionValue",
     "ProductVariant",
     "ProductVariantOptionValue",
+    "Store",
 ]
