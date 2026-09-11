@@ -21,7 +21,7 @@ const navItems = [
   ]},
   { name: 'Orders', path: '/orders', icon: ShoppingCart },
   { name: 'Customers', path: '/customers', icon: Users },
-  { name: 'Payments', path: '/billing', icon: CreditCard },
+  { name: 'Payments', path: '/payments', icon: CreditCard },
   { name: 'Analytics', path: '/analytics', icon: BarChart3 },
   { name: 'Settings', path: '/settings', icon: Settings },
 ]
@@ -37,17 +37,11 @@ watch(currentPath, path => { if (path.startsWith('/catalogue/')) openGroups.valu
   <aside :class="['sidebar', { collapsed }]">
     <div class="sidebar-content" :class="{ open: mobileMenuOpen }">
       <div class="sidebar-header">
-        <button class="logo" type="button" @click="navigate('/dashboard')" :aria-label="`${APP_NAME} home`" :title="APP_TAGLINE">
-          <span class="logo-icon">{{ APP_MARK }}</span><span class="logo-text">{{ APP_NAME }}</span>
-        </button>
+        <button class="logo" type="button" @click="navigate('/dashboard')" :aria-label="`${APP_NAME} home`" :title="APP_TAGLINE"><span class="logo-icon">{{ APP_MARK }}</span><span class="logo-text">{{ APP_NAME }}</span></button>
         <button class="sidebar-toggle" type="button" :aria-label="collapsed ? 'Expand sidebar' : 'Collapse sidebar'" :title="collapsed ? 'Expand sidebar' : 'Collapse sidebar'" @click="emit('toggleCollapse')"><PanelLeftOpen v-if="collapsed" :size="17" /><PanelLeftClose v-else :size="17" /></button>
       </div>
       <button class="mobile-menu-btn" @click="mobileMenuOpen = !mobileMenuOpen" :aria-label="mobileMenuOpen ? 'Close navigation' : 'Open navigation'"><Menu v-if="!mobileMenuOpen" :size="22" /><X v-else :size="22" /></button>
-      <div class="shop-info">
-        <div class="shop-avatar">{{ auth.activeTenant?.name?.charAt(0)?.toUpperCase() || 'S' }}</div>
-        <div class="shop-details"><p class="shop-name">{{ auth.activeTenant?.name || 'Your business' }}</p><p class="shop-role">{{ auth.activeTenant?.role || 'Owner' }}</p></div>
-        <ChevronDown :size="15" class="shop-chevron" />
-      </div>
+      <div class="shop-info"><div class="shop-avatar">{{ auth.activeTenant?.name?.charAt(0)?.toUpperCase() || 'S' }}</div><div class="shop-details"><p class="shop-name">{{ auth.activeTenant?.name || 'Your business' }}</p><p class="shop-role">{{ auth.activeTenant?.role || 'Owner' }}</p></div><ChevronDown :size="15" class="shop-chevron" /></div>
       <div class="nav-label">Workspace</div>
       <nav class="nav-list" aria-label="Main navigation">
         <div v-for="item in navItems" :key="item.name" class="nav-group">
