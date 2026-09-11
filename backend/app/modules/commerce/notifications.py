@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 def normalize_phone(value: str) -> str:
     phone = "".join(character for character in value.strip() if character.isdigit() or character == "+")
-    if phone.startswith("07") or phone.startswith("01"):
+    if phone.startswith(("07", "01")):
         return "+254" + phone[1:]
     if phone.startswith("254"):
         return "+" + phone
