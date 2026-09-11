@@ -2,7 +2,10 @@
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
-import { LayoutDashboard, Package, FolderOpen, ShoppingCart, Users, CreditCard, BarChart3, Settings, LogOut, Menu, X, ChevronDown } from '@lucide/vue'
+import { LayoutDashboard, Package, FolderOpen, ShoppingCart, Users, CreditCard, BarChart3, Settings, LogOut, Menu, X, ChevronDown, PanelLeftClose, PanelLeftOpen } from '@lucide/vue'
+
+defineProps<{ collapsed: boolean }>()
+const emit = defineEmits<{ toggleCollapse: [] }>()
 
 const router = useRouter()
 const route = useRoute()
@@ -26,20 +29,35 @@ const navItems = [
 
 const currentPath = computed(() => route.path)
 function isActive(path: string) { return currentPath.value === path || currentPath.value.startsWith(`${path}/`) }
-function toggleGroup(key: string) { openGroups.value[key] = !openGroups.value[key] }
+function toggleGroup(key: string) {
+  if (key === 'catalogue' && !isMobile.value && collapsed.value) {
+    emit('toggleCollapse')
+    openGroups.value[key] = true
+    return
+  }
+  openGroups.value[key] = !openGroups.value[key]
+}
 function navigate(path: string) { router.push(path); mobileMenuOpen.value = false }
 async function handleLogout() { await auth.logout(); router.push('/login') }
 watch(currentPath, path => { if (path.startsWith('/catalogue/')) openGroups.value.catalogue = true })
+const isMobile = computed(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 800px)').matches)
+const collapsed = computed(() => props.collapsed)
+const props = defineProps<{ collapsed: boolean }>()
 </script>
 
 <template>
-  <aside class="sidebar">
-    <button class="mobile-menu-btn" @click="mobileMenuOpen = !mobileMenuOpen" aria-label="Toggle navigation">
-      <Menu v-if="!mobileMenuOpen" :size="22" /><X v-else :size="22" />
-    </button>
-    <div :class="['sidebar-content', { open: mobileMenuOpen }]">
-      <button class="logo" type="button" @click="navigate('/dashboard')">
-        <span class="logo-icon">D</span><span class="logo-text">DukaMe</span>
+  <aside :class="['sidebar', { collapsed }]">
+    <div class="sidebar-content" :class="{ open: mobileMenuOpen }">
+      <div class="sidebar-header">
+        <button class="logo" type="button" @click="navigate('/dashboard')" aria-label="DukaMe home">
+          <span class="logo-icon">D</span><span class="logo-text">DukaMe</span>
+        </button>
+        <button class="sidebar-toggle" type="button" :aria-label="collapsed ? 'Expand sidebar' : 'Collapse sidebar'" :title="collapsed ? 'Expand sidebar' : 'Collapse sidebar'" @click="emit('toggleCollapse')">
+          <PanelLeftOpen v-if="collapsed" :size="17" /><PanelLeftClose v-else :size="17" />
+        </button>
+      </div>
+      <button class="mobile-menu-btn" @click="mobileMenuOpen = !mobileMenuOpen" :aria-label="mobileMenuOpen ? 'Close navigation' : 'Open navigation'">
+        <Menu v-if="!mobileMenuOpen" :size="22" /><X v-else :size="22" />
       </button>
       <div class="shop-info">
         <div class="shop-avatar">{{ auth.activeTenant?.name?.charAt(0)?.toUpperCase() || 'S' }}</div>
@@ -49,17 +67,17 @@ watch(currentPath, path => { if (path.startsWith('/catalogue/')) openGroups.valu
       <div class="nav-label">Workspace</div>
       <nav class="nav-list" aria-label="Main navigation">
         <div v-for="item in navItems" :key="item.name" class="nav-group">
-          <button v-if="item.children" class="nav-link nav-parent" :class="{ active: isActive(item.path) }" type="button" @click="toggleGroup(item.key!)">
+          <button v-if="item.children" class="nav-link nav-parent" :class="{ active: isActive(item.path) }" type="button" :title="collapsed ? item.name : undefined" @click="toggleGroup(item.key!)">
             <component :is="item.icon" :size="18" /><span>{{ item.name }}</span><ChevronDown :size="15" class="group-chevron" :class="{ rotated: openGroups[item.key!] }" />
           </button>
-          <button v-else class="nav-link" :class="{ active: isActive(item.path) }" type="button" @click="navigate(item.path)"><component :is="item.icon" :size="18" /><span>{{ item.name }}</span></button>
+          <button v-else class="nav-link" :class="{ active: isActive(item.path) }" type="button" :title="collapsed ? item.name : undefined" @click="navigate(item.path)"><component :is="item.icon" :size="18" /><span>{{ item.name }}</span></button>
           <div v-if="item.children && openGroups[item.key!]" class="subnav">
             <button v-for="child in item.children" :key="child.path" class="subnav-link" :class="{ active: isActive(child.path) }" type="button" @click="navigate(child.path)"><component :is="child.icon" :size="15" /><span>{{ child.name }}</span></button>
           </div>
         </div>
       </nav>
       <div class="sidebar-spacer" />
-      <button class="logout-btn" type="button" @click="handleLogout"><LogOut :size="18" /><span>Sign out</span></button>
+      <button class="logout-btn" type="button" title="Sign out" @click="handleLogout"><LogOut :size="18" /><span>Sign out</span></button>
       <div class="sidebar-footer">DukaMe</div>
     </div>
   </aside>
