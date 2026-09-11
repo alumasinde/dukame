@@ -1,14 +1,19 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
+import { addCartItem } from '../lib/cart'
 import { getStorefrontProduct, type StorefrontProduct } from '../lib/storefront'
 
 const route = useRoute()
 const product = ref<StorefrontProduct | null>(null)
 const loading = ref(true)
+const adding = ref(false)
+const added = ref(false)
 const error = ref('')
 const selectedImage = ref(0)
 const descriptionExpanded = ref(false)
+const quantity = ref(1)
+const selectedOptions = reactive<Record<string, string>>({})
 const DESCRIPTION_LIMIT = 420
 
 const descriptionPreview = computed(() => {
@@ -16,11 +21,63 @@ const descriptionPreview = computed(() => {
   if (description.length <= DESCRIPTION_LIMIT) return description
   return `${description.slice(0, DESCRIPTION_LIMIT).trimEnd()}…`
 })
-
 const hasLongDescription = computed(() => (product.value?.description?.length || 0) > DESCRIPTION_LIMIT)
+
+const optionGroups = computed(() => {
+  const groups = new Map<string, { public_id: string; name: string; values: { public_id: string; name: string }[] }>()
+  for (const variant of product.value?.variants || []) {
+    for (const option of variant.options) {
+      const group = groups.get(option.option_public_id) || { public_id: option.option_public_id, name: option.option_name, values: [] }
+      if (!group.values.some(value => value.public_id === option.value_public_id)) group.values.push({ public_id: option.value_public_id, name: option.value_name })
+      groups.set(option.option_public_id, group)
+    }
+  }
+  return [...groups.values()]
+})
+
+const selectedVariant = computed(() => {
+  const variants = product.value?.variants || []
+  if (!variants.length) return null
+  return variants.find(variant => variant.options.every(option => selectedOptions[option.option_public_id] === option.value_public_id)) || null
+})
+
+const displayPrice = computed(() => selectedVariant.value?.price_minor ?? product.value?.price_minor ?? 0)
+const selectedVariantUnavailable = computed(() => !!product.value?.variants.length && !selectedVariant.value)
 
 function money(minor: number, currency: string) {
   return new Intl.NumberFormat('en-KE', { style: 'currency', currency, maximumFractionDigits: 2 }).format(minor / 100)
+}
+
+function setOption(optionId: string, valueId: string) {
+  selectedOptions[optionId] = valueId
+  added.value = false
+}
+
+function variantStockLabel() {
+  if (!selectedVariant.value) return ''
+  if (!selectedVariant.value.inventory_tracking) return 'Available'
+  if (selectedVariant.value.inventory_quantity <= 0) return 'Out of stock'
+  return `${selectedVariant.value.inventory_quantity} available`
+}
+
+async function addToCart() {
+  if (!product.value || selectedVariantUnavailable.value || !selectedVariant.value && product.value.variants.length) return
+  const available = selectedVariant.value?.inventory_tracking ? selectedVariant.value.inventory_quantity : undefined
+  if (available !== undefined && available < quantity.value) {
+    error.value = `Only ${available} item(s) are available.`
+    return
+  }
+  adding.value = true
+  error.value = ''
+  added.value = false
+  try {
+    await addCartItem(String(route.params.storeSlug), product.value.public_id, quantity.value, selectedVariant.value?.public_id)
+    added.value = true
+  } catch (err: any) {
+    error.value = err?.response?.data?.detail || 'We could not add this product to your cart.'
+  } finally {
+    adding.value = false
+  }
 }
 
 onMounted(async () => {
@@ -28,6 +85,7 @@ onMounted(async () => {
     const response = await getStorefrontProduct(String(route.params.storeSlug), String(route.params.productSlug))
     product.value = response.data
     document.title = response.data.name
+    for (const group of optionGroups.value) selectedOptions[group.public_id] = group.values[0]?.public_id || ''
   } catch (err: any) {
     error.value = err?.response?.data?.detail || 'This product could not be found.'
   } finally {
@@ -39,11 +97,11 @@ onMounted(async () => {
 <template>
   <main class="storefront-page">
     <div v-if="loading" class="storefront-state"><div class="status-spinner" /><p>Loading product…</p></div>
-    <div v-else-if="error" class="storefront-state"><div class="storefront-empty-icon">!</div><h1>Product unavailable</h1><p>{{ error }}</p><RouterLink :to="`/${route.params.storeSlug}`" class="button button-primary">Back to store</RouterLink></div>
+    <div v-else-if="error && !product" class="storefront-state"><div class="storefront-empty-icon">!</div><h1>Product unavailable</h1><p>{{ error }}</p><RouterLink :to="`/${route.params.storeSlug}`" class="button button-primary">Back to store</RouterLink></div>
     <template v-else-if="product">
       <header class="storefront-header">
         <RouterLink :to="`/${route.params.storeSlug}`" class="storefront-brand storefront-brand-link"><span class="storefront-mark">{{ product.name.charAt(0).toUpperCase() }}</span><div><strong>Store</strong><small>Powered by DukaMe</small></div></RouterLink>
-        <button class="storefront-cart" type="button" disabled>Cart <span>0</span></button>
+        <RouterLink :to="`/${route.params.storeSlug}/cart`" class="storefront-cart storefront-cart-link">Cart</RouterLink>
       </header>
 
       <section class="storefront-product-page">
@@ -56,13 +114,28 @@ onMounted(async () => {
           <article class="storefront-detail-copy">
             <span v-if="product.category" class="storefront-eyebrow">{{ product.category.name }}</span>
             <h1>{{ product.name }}</h1>
-            <div class="storefront-price"><strong>{{ money(product.price_minor, product.currency) }}</strong><del v-if="product.compare_at_price_minor">{{ money(product.compare_at_price_minor, product.currency) }}</del></div>
+            <div class="storefront-price"><strong>{{ money(displayPrice, product.currency) }}</strong><del v-if="product.compare_at_price_minor && !selectedVariant">{{ money(product.compare_at_price_minor, product.currency) }}</del></div>
+
+            <div v-if="optionGroups.length" class="storefront-options">
+              <div v-for="group in optionGroups" :key="group.public_id" class="storefront-option-group">
+                <div class="storefront-option-heading"><strong>{{ group.name }}</strong><span>{{ group.values.find(value => value.public_id === selectedOptions[group.public_id])?.name }}</span></div>
+                <div class="storefront-option-values"><button v-for="value in group.values" :key="value.public_id" type="button" :class="{ active: selectedOptions[group.public_id] === value.public_id }" @click="setOption(group.public_id, value.public_id)">{{ value.name }}</button></div>
+              </div>
+              <p v-if="selectedVariant" class="storefront-stock" :class="{ unavailable: selectedVariant.inventory_tracking && selectedVariant.inventory_quantity <= 0 }">{{ variantStockLabel() }}</p>
+              <p v-else class="storefront-form-error">Select an option combination to continue.</p>
+            </div>
+
             <div v-if="product.description" class="storefront-description-wrap">
               <p class="storefront-description">{{ descriptionExpanded ? product.description : descriptionPreview }}</p>
               <button v-if="hasLongDescription" class="storefront-read-more" type="button" :aria-expanded="descriptionExpanded" @click="descriptionExpanded = !descriptionExpanded">{{ descriptionExpanded ? 'Read less' : 'Read more' }} <span aria-hidden="true">{{ descriptionExpanded ? '↑' : '↓' }}</span></button>
             </div>
-            <button class="button button-primary button-lg storefront-add" type="button" disabled>Add to cart</button>
-            <small class="storefront-coming">Shopping and checkout will be available in the next commerce phase.</small>
+
+            <div v-if="error" class="storefront-inline-error">{{ error }}</div>
+            <div v-if="!product.variants.length || selectedVariant" class="storefront-add-row">
+              <div class="storefront-quantity"><button type="button" aria-label="Decrease quantity" :disabled="quantity <= 1" @click="quantity--">−</button><span>{{ quantity }}</span><button type="button" aria-label="Increase quantity" @click="quantity++">+</button></div>
+              <button class="button button-primary button-lg storefront-add" type="button" :disabled="adding || !!(selectedVariant?.inventory_tracking && selectedVariant.inventory_quantity < quantity) || selectedVariantUnavailable || !!(selectedVariant?.inventory_tracking && selectedVariant.inventory_quantity <= 0)" @click="addToCart">{{ adding ? 'Adding…' : added ? 'Added to cart ✓' : 'Add to cart' }}</button>
+            </div>
+            <RouterLink v-if="added" :to="`/${route.params.storeSlug}/cart`" class="storefront-go-cart">View cart →</RouterLink>
           </article>
         </div>
       </section>

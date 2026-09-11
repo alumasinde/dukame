@@ -7,6 +7,20 @@ export interface StorefrontCategory {
   slug: string
   parent_public_id: string | null
 }
+export interface StorefrontVariantOption {
+  option_public_id: string
+  option_name: string
+  value_public_id: string
+  value_name: string
+}
+export interface StorefrontVariant {
+  public_id: string
+  sku: string | null
+  price_minor: number | null
+  inventory_tracking: boolean
+  inventory_quantity: number
+  options: StorefrontVariantOption[]
+}
 export interface StorefrontProduct {
   public_id: string
   name: string
@@ -17,6 +31,7 @@ export interface StorefrontProduct {
   currency: string
   category: StorefrontCategory | null
   media: StorefrontMedia[]
+  variants: StorefrontVariant[]
 }
 export interface Storefront {
   public_id: string
@@ -31,6 +46,7 @@ export interface Storefront {
 const storefrontApi = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1',
   timeout: 15000,
+  withCredentials: true,
 })
 
 export function getStorefront(slug: string) {

@@ -17,6 +17,22 @@ class StorefrontCategory(BaseModel):
     parent_public_id: str | None = None
 
 
+class StorefrontVariantOption(BaseModel):
+    option_public_id: str
+    option_name: str
+    value_public_id: str
+    value_name: str
+
+
+class StorefrontVariant(BaseModel):
+    public_id: str
+    sku: str | None
+    price_minor: int | None
+    inventory_tracking: bool
+    inventory_quantity: int
+    options: list[StorefrontVariantOption]
+
+
 class StorefrontProduct(BaseModel):
     public_id: str
     name: str
@@ -27,6 +43,7 @@ class StorefrontProduct(BaseModel):
     currency: str
     category: StorefrontCategory | None
     media: list[StorefrontMedia]
+    variants: list[StorefrontVariant] = []
 
 
 class StorefrontResponse(BaseModel):

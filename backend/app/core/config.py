@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     default_plan_slug: str = "free"
     media_root: str = "uploads"
     media_max_bytes: int = Field(default=5 * 1024 * 1024, ge=1024, le=25 * 1024 * 1024)
+    cart_session_ttl_seconds: int = Field(default=2592000, ge=3600, le=31536000)
+    cart_item_max_quantity: int = Field(default=1000, ge=1, le=100000)
     trusted_hosts: list[str] = Field(default_factory=lambda: ["localhost", "127.0.0.1", "dukamedev.local"])
     cors_origins: list[str] = Field(
         default_factory=lambda: [
