@@ -1,11 +1,13 @@
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from starlette.middleware.cors import CORSMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.responses import Response
+from starlette.staticfiles import StaticFiles
 
 from app.api.v1.router import api_router
 from app.core.config import settings
@@ -15,6 +17,9 @@ from app.core.health import readiness_check
 from app.core.logging import configure_logging
 from app.core.redis import redis_client
 from app.middleware.rate_limit import RateLimitMiddleware
+
+
+Path(settings.media_root).mkdir(parents=True, exist_ok=True)
 
 
 @asynccontextmanager
@@ -34,6 +39,8 @@ app = FastAPI(
     docs_url="/docs" if settings.debug else None,
     redoc_url="/redoc" if settings.debug else None,
 )
+
+app.mount("/uploads", StaticFiles(directory=settings.media_root), name="uploads")
 
 
 @app.middleware("http")
