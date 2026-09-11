@@ -51,6 +51,12 @@ class OrderStatusResponse(BaseModel):
     is_terminal: bool
 
 
+class OrderStatusHistoryResponse(BaseModel):
+    status: OrderStatusResponse
+    source: str
+    created_at: str
+
+
 class OrderItemResponse(BaseModel):
     public_id: str
     product_public_id: str
@@ -77,6 +83,22 @@ class OrderResponse(BaseModel):
     total_minor: int
     items: list[OrderItemResponse]
     created_at: str
+    tracking_url: str | None = None
+
+
+class OrderTrackingResponse(BaseModel):
+    store_name: str
+    order_number: str
+    status: OrderStatusResponse
+    status_history: list[OrderStatusHistoryResponse]
+    customer_first_name: str
+    currency: str
+    subtotal_minor: int
+    total_minor: int
+    items: list[OrderItemResponse]
+    created_at: str
+    updated_at: str
+    tracking_url: str
 
 
 class OrderStatusUpdate(BaseModel):
