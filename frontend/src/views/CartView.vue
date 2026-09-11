@@ -2,20 +2,23 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import { checkoutCart, getCart, removeCartItem, updateCartItem, type Cart, type Order } from '../lib/cart'
+import { useCartState } from '../lib/cart-state'
 
 const route = useRoute()
 const storeSlug = String(route.params.storeSlug)
+const cartState = useCartState()
 const cart = ref<Cart | null>(null)
 const order = ref<Order | null>(null)
 const loading = ref(true)
 const submitting = ref(false)
+const busyItems = ref<Record<string, boolean>>({})
 const error = ref('')
 const fieldError = ref('')
 const form = reactive({ first_name: '', last_name: '', phone: '', email: '', notes: '' })
 
 const itemCountLabel = computed(() => {
   const count = cart.value?.item_count || 0
-  return `${count} item${count === 1 ? '' : 's'}`
+  return `${count} ${count === 1 ? 'item' : 'items'}`
 })
 
 function money(minor: number, currency: string) {
@@ -26,40 +29,76 @@ function apiError(err: any, fallback: string) {
   return err?.response?.data?.detail || fallback
 }
 
-async function load() {
-  loading.value = true
+function setBusy(itemId: string, value: boolean) {
+  busyItems.value = { ...busyItems.value, [itemId]: value }
+}
+
+async function load(showLoader = true) {
+  if (showLoader) loading.value = true
   error.value = ''
   try {
-    cart.value = (await getCart(storeSlug)).data
+    const response = await getCart(storeSlug)
+    cart.value = response.data
+    cartState.set(storeSlug, response.data)
   } catch (err: any) {
     error.value = apiError(err, 'We could not load your cart.')
   } finally {
-    loading.value = false
+    if (showLoader) loading.value = false
   }
 }
 
 async function changeQuantity(itemId: string, quantity: number) {
-  if (!cart.value || quantity < 1) return
+  const item = cart.value?.items.find(entry => entry.public_id === itemId)
+  if (!cart.value || !item || quantity < 1 || busyItems.value[itemId]) return
+
+  const previous = cart.value
+  const optimistic = { ...cart.value, items: cart.value.items.map(entry => entry.public_id === itemId ? { ...entry, quantity, line_total_minor: entry.unit_price_minor * quantity } : entry) }
+  optimistic.item_count = optimistic.items.reduce((sum, entry) => sum + entry.quantity, 0)
+  optimistic.subtotal_minor = optimistic.items.reduce((sum, entry) => sum + entry.line_total_minor, 0)
+  cart.value = optimistic
+  cartState.update(storeSlug, optimistic)
+  setBusy(itemId, true)
   error.value = ''
+
   try {
-    cart.value = (await updateCartItem(storeSlug, itemId, quantity)).data
+    const response = await updateCartItem(storeSlug, itemId, quantity)
+    cart.value = response.data
+    cartState.update(storeSlug, response.data)
   } catch (err: any) {
+    cart.value = previous
+    cartState.update(storeSlug, previous)
     error.value = apiError(err, 'We could not update that item.')
+  } finally {
+    setBusy(itemId, false)
   }
 }
 
 async function remove(itemId: string) {
-  if (!cart.value) return
+  if (!cart.value || busyItems.value[itemId]) return
+  const previous = cart.value
+  const optimistic = { ...cart.value, items: cart.value.items.filter(item => item.public_id !== itemId) }
+  optimistic.item_count = optimistic.items.reduce((sum, item) => sum + item.quantity, 0)
+  optimistic.subtotal_minor = optimistic.items.reduce((sum, item) => sum + item.line_total_minor, 0)
+  cart.value = optimistic
+  cartState.update(storeSlug, optimistic)
+  setBusy(itemId, true)
   error.value = ''
+
   try {
-    cart.value = (await removeCartItem(storeSlug, itemId)).data
+    const response = await removeCartItem(storeSlug, itemId)
+    cart.value = response.data
+    cartState.update(storeSlug, response.data)
   } catch (err: any) {
+    cart.value = previous
+    cartState.update(storeSlug, previous)
     error.value = apiError(err, 'We could not remove that item.')
+  } finally {
+    setBusy(itemId, false)
   }
 }
 
 async function submitOrder() {
-  if (!cart.value?.items.length) return
+  if (!cart.value?.items.length || submitting.value) return
   fieldError.value = ''
   error.value = ''
   if (!form.first_name.trim() || !form.last_name.trim() || !form.phone.trim()) {
@@ -76,15 +115,16 @@ async function submitOrder() {
       notes: form.notes.trim() || undefined,
     })).data
     cart.value = null
+    cartState.clear(storeSlug)
   } catch (err: any) {
     error.value = apiError(err, 'We could not place your order. Please try again.')
-    await load()
+    await load(false)
   } finally {
     submitting.value = false
   }
 }
 
-onMounted(load)
+onMounted(() => load())
 </script>
 
 <template>
@@ -114,22 +154,29 @@ onMounted(load)
       <template v-else-if="cart">
         <div class="storefront-cart-heading">
           <div><RouterLink :to="`/${storeSlug}`" class="storefront-back">← Continue shopping</RouterLink><h1>Your cart</h1><p>{{ itemCountLabel }}</p></div>
+          <div v-if="cart.items.length" class="storefront-cart-heading-total"><span>Subtotal</span><strong>{{ money(cart.subtotal_minor, cart.currency) }}</strong></div>
         </div>
 
-        <div v-if="error" class="storefront-inline-error">{{ error }}</div>
+        <div v-if="error" class="storefront-inline-error" role="alert">{{ error }}</div>
         <div v-if="cart.items.length" class="storefront-cart-layout">
-          <section class="storefront-cart-items">
-            <article v-for="item in cart.items" :key="item.public_id" class="storefront-cart-item">
+          <section class="storefront-cart-items" aria-label="Cart items">
+            <article v-for="item in cart.items" :key="item.public_id" class="storefront-cart-item" :class="{ 'is-busy': busyItems[item.public_id] }">
               <RouterLink :to="`/${storeSlug}/products/${item.product_slug}`" class="storefront-cart-item-image"><img v-if="item.image_url" :src="item.image_url" :alt="item.product_name" /><span v-else>No image</span></RouterLink>
               <div class="storefront-cart-item-copy">
-                <RouterLink :to="`/${storeSlug}/products/${item.product_slug}`"><strong>{{ item.product_name }}</strong></RouterLink>
-                <small v-if="item.variant_label">{{ item.variant_label }}</small>
-                <small v-if="item.sku">SKU: {{ item.sku }}</small>
-                <div class="storefront-cart-item-bottom">
-                  <div class="storefront-quantity"><button type="button" aria-label="Decrease quantity" :disabled="item.quantity <= 1" @click="changeQuantity(item.public_id, item.quantity - 1)">−</button><span>{{ item.quantity }}</span><button type="button" aria-label="Increase quantity" @click="changeQuantity(item.public_id, item.quantity + 1)">+</button></div>
-                  <strong>{{ money(item.line_total_minor, item.currency) }}</strong>
+                <div class="storefront-cart-item-title">
+                  <RouterLink :to="`/${storeSlug}/products/${item.product_slug}`"><strong>{{ item.product_name }}</strong></RouterLink>
+                  <button type="button" class="storefront-remove" :disabled="busyItems[item.public_id]" @click="remove(item.public_id)">Remove</button>
                 </div>
-                <button type="button" class="storefront-remove" @click="remove(item.public_id)">Remove</button>
+                <small v-if="item.variant_label">{{ item.variant_label }}</small>
+                <small v-if="item.sku" class="storefront-item-sku">SKU: {{ item.sku }}</small>
+                <div class="storefront-cart-item-bottom">
+                  <div class="storefront-quantity" :class="{ disabled: busyItems[item.public_id] }">
+                    <button type="button" aria-label="Decrease quantity" :disabled="item.quantity <= 1 || busyItems[item.public_id]" @click="changeQuantity(item.public_id, item.quantity - 1)">−</button>
+                    <span aria-live="polite">{{ item.quantity }}</span>
+                    <button type="button" aria-label="Increase quantity" :disabled="busyItems[item.public_id]" @click="changeQuantity(item.public_id, item.quantity + 1)">+</button>
+                  </div>
+                  <div class="storefront-cart-item-price"><span>{{ money(item.unit_price_minor, item.currency) }} each</span><strong>{{ money(item.line_total_minor, item.currency) }}</strong></div>
+                </div>
               </div>
             </article>
           </section>
@@ -149,7 +196,7 @@ onMounted(load)
             <button class="button button-primary button-lg storefront-add" type="button" :disabled="submitting" @click="submitOrder">{{ submitting ? 'Placing order…' : 'Place order' }}</button>
           </aside>
         </div>
-        <div v-else class="storefront-empty"><div class="storefront-empty-icon">🛒</div><h2>Your cart is empty</h2><p>Add something you like and it will appear here.</p><RouterLink :to="`/${storeSlug}`" class="button button-primary">Browse products</RouterLink></div>
+        <div v-else class="storefront-empty storefront-cart-empty"><div class="storefront-empty-icon" aria-hidden="true">🛒</div><h2>Your cart is empty</h2><p>Add something you like and it will appear here.</p><RouterLink :to="`/${storeSlug}`" class="button button-primary">Browse products</RouterLink></div>
       </template>
     </section>
   </main>
