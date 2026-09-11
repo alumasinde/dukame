@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Index, Integer, String, Text, func
+from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -29,6 +29,6 @@ class PaymentMethod(Base):
     payments: Mapped[list["Payment"]] = relationship(back_populates="payment_method")
 
     __table_args__ = (
-        Index("uq_payment_methods_store_code", "store_id", "code", unique=True),
+        UniqueConstraint("store_id", "code", name="uq_payment_methods_store_code"),
         Index("ix_payment_methods_store_enabled", "store_id", "is_enabled", "sort_order"),
     )
