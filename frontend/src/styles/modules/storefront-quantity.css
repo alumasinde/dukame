@@ -1,0 +1,12 @@
+.storefront-product-quantity { width: 100%; min-height: 42px; display: grid; grid-template-columns: 42px minmax(0, 1fr) 42px; align-items: center; overflow: hidden; border: 1px solid #c9d9d5; border-radius: 9px; background: #fff; }
+.storefront-product-quantity button { width: 100%; height: 100%; min-height: 42px; display: grid; place-items: center; border: 0; background: #f7faf9; color: var(--primary); font-size: 18px; line-height: 1; font-weight: 700; cursor: pointer; }
+.storefront-product-quantity button:first-child { border-right: 1px solid #e4ecea; }
+.storefront-product-quantity button:last-child { border-left: 1px solid #e4ecea; }
+.storefront-product-quantity button:hover:not(:disabled) { background: var(--soft); }
+.storefront-product-quantity button:disabled { color: #aeb9b6; cursor: not-allowed; }
+.storefront-product-quantity span { display: grid; place-items: center; min-width: 0; color: var(--ink); font-size: 12px; font-weight: 800; }
+.storefront-product-quantity.busy { opacity: .65; pointer-events: none; }
+@media (max-width: 680px) {
+  .storefront-product-quantity { grid-template-columns: 36px minmax(0, 1fr) 36px; }
+  .storefront-product-quantity button { min-height: 40px; }
+}
