@@ -1,9 +1,8 @@
 import uuid
-from collections.abc import Awaitable, Callable
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse
 from starlette import status
 
 from app.core.logging import get_logger
