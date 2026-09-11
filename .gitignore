@@ -22,6 +22,9 @@ yarn-error.log*
 # Frontend build
 frontend/dist/
 
+# Uploaded media
+backend/uploads/
+
 # Coverage / logs
 coverage.xml
 htmlcov/
