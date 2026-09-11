@@ -68,6 +68,10 @@ jobs:
           REDIS_URL: redis://127.0.0.1:6379/0
           JWT_SECRET: ci-test-secret-change-me-2026-strong
         run: mypy app
+      - name: Production image build
+        run: docker build -f Dockerfile -t dukame-api:ci .
+      - name: Production compose validation
+        run: DUKAME_ENV_FILE=.env.example docker compose -f docker-compose.prod.yml config
 
   frontend:
     runs-on: ubuntu-latest
