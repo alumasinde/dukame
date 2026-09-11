@@ -40,6 +40,12 @@ export interface OrderStatus {
   is_terminal: boolean
 }
 
+export interface OrderStatusHistory {
+  status: OrderStatus
+  source: string
+  created_at: string
+}
+
 export interface OrderItem {
   public_id: string
   product_public_id: string
@@ -66,50 +72,36 @@ export interface Order {
   total_minor: number
   items: OrderItem[]
   created_at: string
+  tracking_url?: string | null
+}
+
+export interface OrderTracking {
+  store_name: string
+  order_number: string
+  status: OrderStatus
+  status_history: OrderStatusHistory[]
+  customer_first_name: string
+  currency: string
+  subtotal_minor: number
+  total_minor: number
+  items: OrderItem[]
+  created_at: string
+  updated_at: string
+  tracking_url: string
 }
 
 function path(storeSlug: string, suffix = '') {
   return `/storefront/${encodeURIComponent(storeSlug)}${suffix}`
 }
 
-export function getCart(storeSlug: string) {
-  return api.get<Cart>(path(storeSlug, '/cart'))
-}
-
-export function addCartItem(storeSlug: string, productPublicId: string, quantity: number, variantPublicId?: string | null) {
-  return api.post<Cart>(path(storeSlug, '/cart/items'), {
-    product_public_id: productPublicId,
-    variant_public_id: variantPublicId || undefined,
-    quantity,
-  })
-}
-
-export function updateCartItem(storeSlug: string, itemPublicId: string, quantity: number) {
-  return api.patch<Cart>(path(storeSlug, `/cart/items/${encodeURIComponent(itemPublicId)}`), { quantity })
-}
-
-export function removeCartItem(storeSlug: string, itemPublicId: string) {
-  return api.delete<Cart>(path(storeSlug, `/cart/items/${encodeURIComponent(itemPublicId)}`))
-}
-
-export function checkoutCart(storeSlug: string, payload: CheckoutPayload) {
-  return api.post<Order>(path(storeSlug, '/cart/checkout'), payload)
-}
-
-export function getOrderStatuses(tenantPublicId: string) {
-  return api.get<OrderStatus[]>(`/tenants/${encodeURIComponent(tenantPublicId)}/orders/statuses`)
-}
-
-export function getOrders(tenantPublicId: string, params?: { offset?: number; limit?: number; status_public_id?: string }) {
-  return api.get<Order[]>(`/tenants/${encodeURIComponent(tenantPublicId)}/orders`, { params })
-}
-
-export function getOrder(tenantPublicId: string, orderPublicId: string) {
-  return api.get<Order>(`/tenants/${encodeURIComponent(tenantPublicId)}/orders/${encodeURIComponent(orderPublicId)}`)
-}
-
-export function updateOrderStatus(tenantPublicId: string, orderPublicId: string, statusPublicId: string) {
-  return api.patch<Order>(`/tenants/${encodeURIComponent(tenantPublicId)}/orders/${encodeURIComponent(orderPublicId)}/status`, {
-    status_public_id: statusPublicId,
-  })
-}
+export function getCart(storeSlug: string) { return api.get<Cart>(path(storeSlug, '/cart')) }
+export function addCartItem(storeSlug: string, productPublicId: string, quantity: number, variantPublicId?: string | null) { return api.post<Cart>(path(storeSlug, '/cart/items'), { product_public_id: productPublicId, variant_public_id: variantPublicId || undefined, quantity }) }
+export function updateCartItem(storeSlug: string, itemPublicId: string, quantity: number) { return api.patch<Cart>(path(storeSlug, `/cart/items/${encodeURIComponent(itemPublicId)}`), { quantity }) }
+export function removeCartItem(storeSlug: string, itemPublicId: string) { return api.delete<Cart>(path(storeSlug, `/cart/items/${encodeURIComponent(itemPublicId)}`)) }
+export function checkoutCart(storeSlug: string, payload: CheckoutPayload) { return api.post<Order>(path(storeSlug, '/cart/checkout'), payload) }
+export function getOrderTracking(storeSlug: string, token: string) { return api.get<OrderTracking>(path(storeSlug, `/order/track/${encodeURIComponent(token)}`)) }
+export function getOrderStatuses(tenantPublicId: string) { return api.get<OrderStatus[]>(`/tenants/${encodeURIComponent(tenantPublicId)}/orders/statuses`) }
+export function getOrders(tenantPublicId: string, params?: { offset?: number; limit?: number; status_public_id?: string }) { return api.get<Order[]>(`/tenants/${encodeURIComponent(tenantPublicId)}/orders`, { params }) }
+export function getOrder(tenantPublicId: string, orderPublicId: string) { return api.get<Order>(`/tenants/${encodeURIComponent(tenantPublicId)}/orders/${encodeURIComponent(orderPublicId)}`) }
+export function getNextOrderStatuses(tenantPublicId: string, orderPublicId: string) { return api.get<OrderStatus[]>(`/tenants/${encodeURIComponent(tenantPublicId)}/orders/${encodeURIComponent(orderPublicId)}/next-statuses`) }
+export function updateOrderStatus(tenantPublicId: string, orderPublicId: string, statusPublicId: string) { return api.patch<Order>(`/tenants/${encodeURIComponent(tenantPublicId)}/orders/${encodeURIComponent(orderPublicId)}/status`, { status_public_id: statusPublicId }) }
