@@ -48,8 +48,7 @@ class ProductService:
         except IntegrityError:
             await self.db.rollback()
             raise HTTPException(status_code=409, detail="Product could not be created with the supplied values") from None
-        await self.db.refresh(product)
-        return product
+        return await self.repository.get(store.id, product.public_id)
 
     async def update(self, user: User, tenant_public_id: str, public_id: str, payload: ProductUpdate):
         store = await resolve_store(self.db, user, tenant_public_id, "catalogue.manage")
@@ -85,8 +84,7 @@ class ProductService:
         except IntegrityError:
             await self.db.rollback()
             raise HTTPException(status_code=409, detail="Product could not be updated with the supplied values") from None
-        await self.db.refresh(product)
-        return product
+        return await self.repository.get(store.id, public_id)
 
     async def delete(self, user: User, tenant_public_id: str, public_id: str) -> None:
         store = await resolve_store(self.db, user, tenant_public_id, "catalogue.manage")
