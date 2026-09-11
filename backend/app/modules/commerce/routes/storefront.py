@@ -8,7 +8,8 @@ from app.modules.catalogue.models.store import Store
 from app.modules.commerce.models.order_status_history import OrderStatusHistory
 from app.modules.commerce.schemas import CartItemAdd, CartItemUpdate, CartResponse, CheckoutRequest, OrderResponse, OrderStatusHistoryResponse, OrderStatusResponse, OrderTrackingResponse
 from app.modules.commerce.service import CommerceService
-from app.modules.commerce.tracking import tracking_token, tracking_url
+from app.modules.commerce.tracking import tracking_token as make_tracking_token
+from app.modules.commerce.tracking import tracking_url
 
 router = APIRouter(prefix="/storefront", tags=["commerce"])
 
@@ -31,20 +32,7 @@ def cart_response(cart) -> CartResponse:
     items = []
     for item in cart.items:
         image_url = next((media.url for media in item.product.media if media.status == "active" and media.media_type == "image"), None)
-        items.append({
-            "public_id": item.public_id,
-            "product_public_id": item.product.public_id,
-            "product_name": item.product.name,
-            "product_slug": item.product.slug,
-            "variant_public_id": item.variant.public_id if item.variant else None,
-            "variant_label": variant_label(item.variant),
-            "sku": (item.variant.sku or item.product.sku) if item.variant else item.product.sku,
-            "image_url": image_url,
-            "quantity": item.quantity,
-            "unit_price_minor": item.unit_price_minor,
-            "line_total_minor": item.unit_price_minor * item.quantity,
-            "currency": cart.currency,
-        })
+        items.append({"public_id": item.public_id, "product_public_id": item.product.public_id, "product_name": item.product.name, "product_slug": item.product.slug, "variant_public_id": item.variant.public_id if item.variant else None, "variant_label": variant_label(item.variant), "sku": (item.variant.sku or item.product.sku) if item.variant else item.product.sku, "image_url": image_url, "quantity": item.quantity, "unit_price_minor": item.unit_price_minor, "line_total_minor": item.unit_price_minor * item.quantity, "currency": cart.currency})
     return CartResponse(public_id=cart.public_id, currency=cart.currency, items=items, item_count=sum(item["quantity"] for item in items), subtotal_minor=sum(item["line_total_minor"] for item in items))
 
 
@@ -52,7 +40,7 @@ def empty_cart(currency: str) -> CartResponse:
     return CartResponse(public_id="", currency=currency, items=[], item_count=0, subtotal_minor=0)
 
 
-def order_response(order, include_tracking: bool = False) -> OrderResponse:
+def order_response(order, include_tracking: bool = False, store_slug: str | None = None) -> OrderResponse:
     return OrderResponse(
         public_id=order.public_id,
         order_number=order.order_number,
@@ -67,7 +55,7 @@ def order_response(order, include_tracking: bool = False) -> OrderResponse:
         total_minor=order.total_minor,
         items=[{"public_id": item.public_id, "product_public_id": item.product.public_id if item.product else "", "variant_public_id": item.variant.public_id if item.variant else None, "product_name": item.product_name, "variant_label": item.variant_label, "sku": item.sku, "quantity": item.quantity, "unit_price_minor": item.unit_price_minor, "line_total_minor": item.line_total_minor} for item in order.items],
         created_at=order.created_at.isoformat(),
-        tracking_url=tracking_url(order.store.slug, tracking_token(order.public_id)) if include_tracking else None,
+        tracking_url=tracking_url(store_slug, make_tracking_token(order.public_id)) if include_tracking and store_slug else None,
     )
 
 
@@ -84,7 +72,7 @@ def tracking_response(order, store: Store) -> OrderTrackingResponse:
         items=[{"public_id": item.public_id, "product_public_id": item.product.public_id if item.product else "", "variant_public_id": item.variant.public_id if item.variant else None, "product_name": item.product_name, "variant_label": item.variant_label, "sku": item.sku, "quantity": item.quantity, "unit_price_minor": item.unit_price_minor, "line_total_minor": item.line_total_minor} for item in order.items],
         created_at=order.created_at.isoformat(),
         updated_at=order.updated_at.isoformat(),
-        tracking_url=tracking_url(store.slug, tracking_token(order.public_id)),
+        tracking_url=tracking_url(store.slug, make_tracking_token(order.public_id)),
     )
 
 
@@ -141,10 +129,10 @@ async def checkout(store_slug: str, payload: CheckoutRequest, response: Response
         raise HTTPException(status_code=422, detail="Your cart is empty")
     order = await CommerceService(db).checkout(store, dukame_cart, payload)
     response.delete_cookie("dukame_cart", path=f"/api/v1/storefront/{store.slug}")
-    return order_response(order, include_tracking=True)
+    return order_response(order, include_tracking=True, store_slug=store.slug)
 
 
-@router.get("/{store_slug}/order/track/{tracking_token}", response_model=OrderTrackingResponse)
+@router.get("/{store_slug}/order/track/{tracking_token_value}", response_model=OrderTrackingResponse)
 async def track_order(store_slug: str, tracking_token_value: str, db: AsyncSession = Depends(get_db)) -> OrderTrackingResponse:
     store = await get_store(db, store_slug)
     order = await CommerceService(db).get_public_order(store, tracking_token_value)
