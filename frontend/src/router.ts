@@ -27,8 +27,8 @@ const router = createRouter({
         { path: 'billing', name: 'billing', component: () => import('./views/BillingView.vue') },
         { path: 'team', name: 'team', component: () => import('./views/TeamView.vue') },
         { path: 'settings', name: 'settings', component: () => import('./views/SettingsView.vue') },
-        { path: 'catalogue/products', name: 'catalogue-products', component: phase3View, props: { title: 'Products', description: 'Your product catalogue will live here. Product creation, pricing, stock and variants will be introduced with the catalogue module.' } },
-        { path: 'catalogue/categories', name: 'catalogue-categories', component: phase3View, props: { title: 'Categories', description: 'Organize products into configurable categories for your storefront and catalogue.' } },
+        { path: 'catalogue/products', name: 'catalogue-products', component: () => import('./views/CatalogueProductsView.vue') },
+        { path: 'catalogue/categories', name: 'catalogue-categories', component: () => import('./views/CatalogueCategoriesView.vue') },
         { path: 'catalogue/options', name: 'catalogue-options', component: phase3View, props: { title: 'Product Options', description: 'Define reusable product options and values such as size, colour or other merchant-specific choices.' } },
         { path: 'orders', name: 'orders', component: phase3View, props: { title: 'Orders', description: 'Orders will become the central workflow for receiving, processing and completing customer purchases.' } },
         { path: 'customers', name: 'customers', component: phase3View, props: { title: 'Customers', description: 'Customer profiles, purchase history and customer activity will be managed here.' } },
@@ -45,15 +45,8 @@ router.beforeEach(async (to) => {
   await auth.initialize()
 
   if (to.meta.auth && !auth.isAuthenticated) return { name: 'login', replace: true }
-
-  if (to.meta.guest && auth.isAuthenticated) {
-    return auth.onboardingComplete ? { name: 'dashboard', replace: true } : { name: 'onboarding', replace: true }
-  }
-
-  if (auth.isAuthenticated && !auth.onboardingComplete && !to.meta.requiresOnboarding && to.meta.auth) {
-    return { name: 'onboarding', replace: true }
-  }
-
+  if (to.meta.guest && auth.isAuthenticated) return auth.onboardingComplete ? { name: 'dashboard', replace: true } : { name: 'onboarding', replace: true }
+  if (auth.isAuthenticated && !auth.onboardingComplete && !to.meta.requiresOnboarding && to.meta.auth) return { name: 'onboarding', replace: true }
   if (auth.isAuthenticated && auth.onboardingComplete && to.meta.requiresOnboarding) return { name: 'dashboard', replace: true }
 })
 
