@@ -9,7 +9,7 @@ from app.core.config import settings
 from app.models.base import Base
 from app.modules.auth.models.identity import AuthSession, User
 from app.modules.auth.models.tokens import PasswordResetToken, VerificationToken
-from app.modules.catalogue.models import Category, Product, ProductOption, ProductOptionValue, ProductVariant, ProductVariantOptionValue, Store
+from app.modules.catalogue.models import Category, Product, ProductMedia, ProductOption, ProductOptionValue, ProductVariant, ProductVariantOptionValue, Store
 from app.modules.rbac.models.rbac import Permission, TenantRole, TenantRolePermission
 from app.modules.subscriptions.models.subscription import Plan, PlanFeature, Subscription, SubscriptionEvent
 from app.modules.tenancy.models.tenant import Tenant, TenantUser
