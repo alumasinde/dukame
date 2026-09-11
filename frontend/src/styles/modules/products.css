@@ -1,8 +1,6 @@
 .product-editor {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  gap: 18px;
-  align-items: start;
+  max-width: 1320px;
+  margin: 0 auto;
 }
 
 .product-editor-main,
@@ -169,6 +167,16 @@
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 6px;
+}
+
+@media (max-width: 1100px) {
+  .editor-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .editor-side {
+    position: static;
+  }
 }
 
 @media (max-width: 760px) {
