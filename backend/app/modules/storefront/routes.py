@@ -12,6 +12,15 @@ from app.modules.storefront.schemas import StorefrontProductResponse, Storefront
 router = APIRouter(prefix="/storefront", tags=["storefront"])
 
 
+def category_response(category: Category) -> dict[str, str | None]:
+    return {
+        "public_id": category.public_id,
+        "name": category.name,
+        "slug": category.slug,
+        "parent_public_id": category.parent.public_id if category.parent else None,
+    }
+
+
 def product_response(product: Product) -> StorefrontProductResponse:
     return StorefrontProductResponse(
         public_id=product.public_id,
@@ -21,15 +30,7 @@ def product_response(product: Product) -> StorefrontProductResponse:
         price_minor=product.price_minor,
         compare_at_price_minor=product.compare_at_price_minor,
         currency=product.currency,
-        category=(
-            {
-                "public_id": product.category.public_id,
-                "name": product.category.name,
-                "slug": product.category.slug,
-            }
-            if product.category
-            else None
-        ),
+        category=(category_response(product.category) if product.category else None),
         media=[
             {"url": item.url, "alt_text": item.alt_text}
             for item in product.media
@@ -62,8 +63,9 @@ async def get_storefront(store_slug: str, db: AsyncSession = Depends(get_db)) ->
         (
             await db.scalars(
                 select(Category)
+                .options(selectinload(Category.parent))
                 .where(Category.store_id == store.id, Category.status == "active")
-                .order_by(Category.name.asc())
+                .order_by(Category.sort_order.asc(), Category.name.asc())
             )
         ).all()
     )
@@ -73,10 +75,7 @@ async def get_storefront(store_slug: str, db: AsyncSession = Depends(get_db)) ->
         slug=store.slug,
         description=store.description,
         currency=store.currency,
-        categories=[
-            {"public_id": item.public_id, "name": item.name, "slug": item.slug}
-            for item in categories
-        ],
+        categories=[category_response(item) for item in categories],
         products=[product_response(product) for product in products],
     )
 
