@@ -32,6 +32,16 @@ export const catalogueApi = {
   updateVariant(tenantId: string, productId: string, variantId: string, payload: Record<string, unknown>) { return api.put<ProductVariant>(`/tenants/${tenantId}/products/${productId}/variants/${variantId}`, payload) },
   deleteVariant(tenantId: string, productId: string, variantId: string) { return api.delete(`/tenants/${tenantId}/products/${productId}/variants/${variantId}`) },
   listMedia(tenantId: string, productId: string) { return api.get<ProductMedia[]>(`/tenants/${tenantId}/products/${productId}/media`) },
+  uploadMedia(tenantId: string, productId: string, file: File, altText: string | null, sortOrder: number) {
+    const formData = new FormData()
+    formData.append('file', file)
+    if (altText) formData.append('alt_text', altText)
+    formData.append('sort_order', String(sortOrder))
+    return api.post<ProductMedia>(`/tenants/${tenantId}/products/${productId}/media/upload`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 60000,
+    })
+  },
   createMedia(tenantId: string, productId: string, payload: Record<string, unknown>) { return api.post<ProductMedia>(`/tenants/${tenantId}/products/${productId}/media`, payload) },
   updateMedia(tenantId: string, productId: string, mediaId: string, payload: Record<string, unknown>) { return api.put<ProductMedia>(`/tenants/${tenantId}/products/${productId}/media/${mediaId}`, payload) },
   deleteMedia(tenantId: string, productId: string, mediaId: string) { return api.delete(`/tenants/${tenantId}/products/${productId}/media/${mediaId}`) },
