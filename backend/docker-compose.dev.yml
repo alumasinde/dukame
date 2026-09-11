@@ -22,6 +22,8 @@ services:
       timeout: 3s
       retries: 3
       start_period: 5s
+    mem_limit: 768m
+    mem_reservation: 128m
     restart: unless-stopped
 
   worker:
@@ -42,14 +44,21 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+      start_period: 5s
+    mem_limit: 512m
+    mem_reservation: 64m
+    init: true
+    stop_grace_period: 10s
     restart: unless-stopped
 
   redis:
     image: redis:7-alpine
-    command: ["redis-server", "--appendonly", "yes"]
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "192mb", "--maxmemory-policy", "noeviction"]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 10
+    mem_limit: 256m
+    mem_reservation: 32m
     restart: unless-stopped
