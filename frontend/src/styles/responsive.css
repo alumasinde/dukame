@@ -8,8 +8,12 @@
   .shop-layout,
   .team-layout,
   .settings-grid,
-  .product-editor {
+  .editor-grid {
     grid-template-columns: 1fr;
+  }
+
+  .editor-side {
+    position: static;
   }
 }
 
