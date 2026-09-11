@@ -34,6 +34,8 @@ class Settings(BaseSettings):
     trusted_hosts: list[str] = Field(default_factory=lambda: ["localhost", "127.0.0.1", "dukamedev.local"])
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173", "http://127.0.0.1:5173", "http://dukamedev.local:5173"])
     frontend_base_url: str = "http://dukamedev.local:5173"
+    public_api_base_url: str = "http://dukamedev.local:8000"
+    payment_encryption_key: SecretStr | None = None
     sms_provider: str = "none"
     sms_api_key: SecretStr | None = None
     sms_username: str | None = None
