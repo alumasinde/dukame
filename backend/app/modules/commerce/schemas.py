@@ -24,6 +24,7 @@ class PaymentMethodResponse(BaseModel):
     public_id: str
     code: str
     name: str
+    is_enabled: bool = True
     instructions: str | None = None
     callback_url: str | None = None
     callback_token: str | None = None
@@ -34,6 +35,13 @@ class PaymentMethodCreate(BaseModel):
     name: str = Field(min_length=2, max_length=100)
     instructions: str | None = Field(default=None, max_length=2000)
     is_enabled: bool = True
+    config: dict[str, str] | None = None
+
+
+class PaymentMethodUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=2, max_length=100)
+    instructions: str | None = Field(default=None, max_length=2000)
+    is_enabled: bool | None = None
     config: dict[str, str] | None = None
 
 
