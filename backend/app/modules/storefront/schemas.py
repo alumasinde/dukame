@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class StorefrontMedia(BaseModel):
@@ -30,7 +30,7 @@ class StorefrontVariant(BaseModel):
     price_minor: int | None
     inventory_tracking: bool
     inventory_quantity: int
-    options: list[StorefrontVariantOption]
+    options: list[StorefrontVariantOption] = Field(default_factory=list)
 
 
 class StorefrontProduct(BaseModel):
@@ -41,9 +41,11 @@ class StorefrontProduct(BaseModel):
     price_minor: int
     compare_at_price_minor: int | None
     currency: str
+    inventory_tracking: bool
+    inventory_quantity: int
     category: StorefrontCategory | None
-    media: list[StorefrontMedia]
-    variants: list[StorefrontVariant] = []
+    media: list[StorefrontMedia] = Field(default_factory=list)
+    variants: list[StorefrontVariant] = Field(default_factory=list)
 
 
 class StorefrontResponse(BaseModel):
