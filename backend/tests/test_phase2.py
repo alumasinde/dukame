@@ -24,9 +24,11 @@ def test_phase2_identity_tenancy_subscription_flow() -> None:
         assert registered.status_code == 201, registered.text
         user = registered.json()
         assert user["email"] == email
+        assert user["first_name"] == "Test"
+        assert user["last_name"] == "Merchant"
         assert user["onboarding"]["completed"] is False
-        assert user["onboarding"]["current_step"] == "shop_setup"
-        assert user["onboarding"]["total_steps"] == 3
+        assert user["onboarding"]["current_step"] == "business_setup"
+        assert user["onboarding"]["total_steps"] == 1
 
         logged_in = client.post(
             "/api/v1/auth/login", json={"email": email, "password": password}
@@ -40,14 +42,20 @@ def test_phase2_identity_tenancy_subscription_flow() -> None:
         headers = {"Authorization": f"Bearer {tokens['access_token']}"}
         me = client.get("/api/v1/auth/me", headers=headers)
         assert me.status_code == 200, me.text
-        assert me.json()["public_id"] == user["public_id"]
-        assert me.json()["onboarding"]["completed"] is False
-        assert me.json()["onboarding"]["total_steps"] == 3
+        me_user = me.json()
+        assert me_user["public_id"] == user["public_id"]
+        assert me_user["email"] == email
+        assert me_user["first_name"] == "Test"
+        assert me_user["last_name"] == "Merchant"
+        assert me_user["onboarding"]["completed"] is False
+        assert me_user["onboarding"]["current_step"] == "business_setup"
+        assert me_user["onboarding"]["total_steps"] == 1
 
         onboarding_status = client.get("/api/v1/onboarding/status", headers=headers)
         assert onboarding_status.status_code == 200, onboarding_status.text
         assert onboarding_status.json()["completed"] is False
-        assert onboarding_status.json()["current_step"] == "shop_setup"
+        assert onboarding_status.json()["current_step"] == "business_setup"
+        assert onboarding_status.json()["total_steps"] == 1
 
         completed = client.post(
             "/api/v1/onboarding/shop",
@@ -64,11 +72,14 @@ def test_phase2_identity_tenancy_subscription_flow() -> None:
 
         me_after_onboarding = client.get("/api/v1/auth/me", headers=headers)
         assert me_after_onboarding.status_code == 200, me_after_onboarding.text
-        assert me_after_onboarding.json()["onboarding"]["completed"] is True
-        assert (
-            me_after_onboarding.json()["onboarding"]["tenant_public_id"]
-            == onboarding["tenant_public_id"]
-        )
+        me_after = me_after_onboarding.json()
+        assert me_after["email"] == email
+        assert me_after["first_name"] == "Test"
+        assert me_after["last_name"] == "Merchant"
+        assert me_after["onboarding"]["completed"] is True
+        assert me_after["onboarding"]["current_step"] is None
+        assert me_after["onboarding"]["total_steps"] == 1
+        assert me_after["onboarding"]["tenant_public_id"] == onboarding["tenant_public_id"]
 
         plans = client.get("/api/v1/subscriptions/plans")
         assert plans.status_code == 200, plans.text
