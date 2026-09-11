@@ -16,6 +16,7 @@ export const catalogueApi = {
   updateCategory(tenantId: string, id: string, payload: Record<string, unknown>) { return api.put<Category>(`/tenants/${tenantId}/categories/${id}`, payload) },
   deleteCategory(tenantId: string, id: string) { return api.delete(`/tenants/${tenantId}/categories/${id}`) },
   listProducts(tenantId: string) { return api.get<Product[]>(`/tenants/${tenantId}/products`, { params: { limit: 100 } }) },
+  getProduct(tenantId: string, id: string) { return api.get<Product>(`/tenants/${tenantId}/products/${id}`) },
   createProduct(tenantId: string, payload: Record<string, unknown>) { return api.post<Product>(`/tenants/${tenantId}/products`, payload) },
   updateProduct(tenantId: string, id: string, payload: Record<string, unknown>) { return api.put<Product>(`/tenants/${tenantId}/products/${id}`, payload) },
   deleteProduct(tenantId: string, id: string) { return api.delete(`/tenants/${tenantId}/products/${id}`) },
