@@ -25,6 +25,8 @@ export interface Tenant {
   slug: string
   status: string
   role: string
+  business_type_public_id: string | null
+  business_type_name: string | null
 }
 
 export const useAuthStore = defineStore('auth', {
@@ -43,24 +45,10 @@ export const useAuthStore = defineStore('auth', {
   actions: {
     async initialize() {
       if (this.initialized) return
-      if (!getAccessToken()) {
-        this.initialized = true
-        return
-      }
-      try {
-        await this.loadSession()
-      } catch (err) {
-        console.error('[Auth] Session load failed:', err)
-        this.logoutLocal()
-      } finally {
-        this.initialized = true
-      }
+      if (!getAccessToken()) { this.initialized = true; return }
+      try { await this.loadSession() } catch (err) { console.error('[Auth] Session load failed:', err); this.logoutLocal() } finally { this.initialized = true }
     },
-    async loadUser() {
-      const { data: user } = await api.get<User>('/auth/me')
-      this.user = user
-      return user
-    },
+    async loadUser() { const { data: user } = await api.get<User>('/auth/me'); this.user = user; return user },
     async loadTenants() {
       const { data } = await api.get<{ items: Tenant[] }>('/tenants')
       this.tenants = data.items
@@ -69,83 +57,32 @@ export const useAuthStore = defineStore('auth', {
       this.setActiveTenant(exists ? stored! : this.tenants[0]?.public_id || null)
       return this.tenants
     },
-    async loadSession() {
-      await this.loadUser()
-      await this.loadTenants()
-    },
-    async validateSession() {
-      try {
-        await this.loadUser()
-      } catch {
-        throw new Error('Session validation failed')
-      }
-    },
+    async loadSession() { await this.loadUser(); await this.loadTenants() },
+    async validateSession() { try { await this.loadUser() } catch { throw new Error('Session validation failed') } },
     async login(email: string, password: string) {
       this.loading = true
       try {
         const { data } = await api.post('/auth/login', { email, password })
         saveTokens(data.access_token, data.refresh_token)
-
         await this.loadUser()
-
-        try {
-          await this.loadTenants()
-        } catch (err) {
-          console.error('[Auth] Workspace list could not be loaded after sign in:', err)
-          this.tenants = []
-          this.setActiveTenant(null)
-        }
-      } catch (err) {
-        clearTokens()
-        this.user = null
-        this.tenants = []
-        this.activeTenantId = null
-        throw err
-      } finally {
-        this.loading = false
-      }
+        try { await this.loadTenants() } catch (err) { console.error('[Auth] Workspace list could not be loaded after sign in:', err); this.tenants = []; this.setActiveTenant(null) }
+      } catch (err) { clearTokens(); this.user = null; this.tenants = []; this.activeTenantId = null; throw err } finally { this.loading = false }
     },
     async register(payload: { email: string; password: string; first_name: string; last_name: string; phone?: string }) {
       this.loading = true
-      try {
-        await api.post('/auth/register', payload)
-        await this.login(payload.email, payload.password)
-      } finally {
-        this.loading = false
-      }
+      try { await api.post('/auth/register', payload); await this.login(payload.email, payload.password) } finally { this.loading = false }
     },
-    async completeOnboarding(shopName: string, shopSlug?: string) {
+    async completeOnboarding(shopName: string, shopSlug: string | undefined, businessTypePublicId: string) {
       this.loading = true
       try {
-        const { data } = await api.post<OnboardingStatus>('/onboarding/shop', {
-          shop_name: shopName,
-          shop_slug: shopSlug,
-        })
+        const { data } = await api.post<OnboardingStatus>('/onboarding/shop', { shop_name: shopName, shop_slug: shopSlug, business_type_public_id: businessTypePublicId })
         if (this.user) this.user.onboarding = data
         await this.loadSession()
         return data
-      } finally {
-        this.loading = false
-      }
+      } finally { this.loading = false }
     },
-    setActiveTenant(publicId: string | null) {
-      this.activeTenantId = publicId
-      if (publicId) sessionStorage.setItem('dukame_tenant_public_id', publicId)
-      else sessionStorage.removeItem('dukame_tenant_public_id')
-    },
-    logoutLocal() {
-      clearTokens()
-      this.user = null
-      this.tenants = []
-      this.activeTenantId = null
-      sessionStorage.removeItem('dukame_tenant_public_id')
-    },
-    async logout() {
-      try {
-        await api.post('/auth/logout')
-      } finally {
-        this.logoutLocal()
-      }
-    },
+    setActiveTenant(publicId: string | null) { this.activeTenantId = publicId; if (publicId) sessionStorage.setItem('dukame_tenant_public_id', publicId); else sessionStorage.removeItem('dukame_tenant_public_id') },
+    logoutLocal() { clearTokens(); this.user = null; this.tenants = []; this.activeTenantId = null; sessionStorage.removeItem('dukame_tenant_public_id') },
+    async logout() { try { await api.post('/auth/logout') } finally { this.logoutLocal() } },
   },
 })
