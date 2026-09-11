@@ -1,9 +1,16 @@
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Index, Integer, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
+
+if TYPE_CHECKING:
+    from app.modules.catalogue.models.category import Category
+    from app.modules.catalogue.models.product_media import ProductMedia
+    from app.modules.catalogue.models.store import Store
+    from app.modules.catalogue.models.variant import ProductVariant
 
 
 class Product(Base):
