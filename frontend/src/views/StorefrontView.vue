@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
+import { removeCartItem, updateCartItem } from '../lib/cart'
 import { useCartState } from '../lib/cart-state'
 import { getStorefront, type Storefront, type StorefrontCategory, type StorefrontProduct } from '../lib/storefront'
 
@@ -14,6 +15,7 @@ const searchQuery = ref('')
 const addingProduct = ref('')
 const addedProduct = ref('')
 const addError = ref('')
+const quantityBusy = ref('')
 let addedTimer: ReturnType<typeof setTimeout> | undefined
 
 const categoryMap = computed(() => new Map((store.value?.categories || []).map(category => [category.public_id, category])))
@@ -37,14 +39,33 @@ function hasDiscount(product: StorefrontProduct) { return product.compare_at_pri
 function categoryCount(category: StorefrontCategory) { return categoryCounts.value.get(category.public_id) || 0 }
 function hasVariants(product: StorefrontProduct) { return product.variants.length > 0 }
 function isAvailable(product: StorefrontProduct) { return product.variants.length ? product.variants.some(variant => !variant.inventory_tracking || variant.inventory_quantity > 0) : !product.inventory_tracking || product.inventory_quantity > 0 }
+function cartItemFor(product: StorefrontProduct) { return cartState.cart.value?.items.find(item => item.product_public_id === product.public_id && !item.variant_public_id) || null }
 function selectCategory(id: string) { selectedCategory.value = id; const section = document.querySelector('.storefront-products-section'); if (section) window.scrollTo({ top: window.scrollY + section.getBoundingClientRect().top - 82, behavior: 'smooth' }) }
 
 async function addProduct(product: StorefrontProduct) {
-  if (hasVariants(product) || !isAvailable(product) || addingProduct.value) return
+  if (hasVariants(product) || !isAvailable(product) || addingProduct.value || quantityBusy.value) return
   addingProduct.value = product.public_id; addError.value = ''
   try { await cartState.quickAdd(String(route.params.storeSlug), product.public_id); addedProduct.value = product.public_id; if (addedTimer) clearTimeout(addedTimer); addedTimer = setTimeout(() => { addedProduct.value = '' }, 2200) }
   catch (err: any) { addError.value = err?.response?.data?.detail || 'We could not add that product. Please try again.' }
   finally { addingProduct.value = '' }
+}
+
+async function changeProductQuantity(product: StorefrontProduct, delta: number) {
+  const item = cartItemFor(product)
+  if (!item || quantityBusy.value || !isAvailable(product)) return
+  const nextQuantity = item.quantity + delta
+  if (nextQuantity < 1) {
+    quantityBusy.value = item.public_id
+    try { const response = await removeCartItem(String(route.params.storeSlug), item.public_id); cartState.update(String(route.params.storeSlug), response.data) }
+    catch (err: any) { addError.value = err?.response?.data?.detail || 'We could not update your cart.' }
+    finally { quantityBusy.value = '' }
+    return
+  }
+  if (product.inventory_tracking && nextQuantity > product.inventory_quantity) return
+  quantityBusy.value = item.public_id
+  try { const response = await updateCartItem(String(route.params.storeSlug), item.public_id, nextQuantity); cartState.update(String(route.params.storeSlug), response.data) }
+  catch (err: any) { addError.value = err?.response?.data?.detail || 'We could not update your cart.' }
+  finally { quantityBusy.value = '' }
 }
 
 onMounted(async () => { try { const slug = String(route.params.storeSlug); const [response] = await Promise.all([getStorefront(slug), cartState.load(slug)]); store.value = response.data; document.title = response.data.name } catch (err: any) { error.value = err?.response?.data?.detail || 'This store could not be found.' } finally { loading.value = false } })
@@ -65,7 +86,18 @@ onMounted(async () => { try { const slug = String(route.params.storeSlug); const
           <div v-if="filteredProducts.length" class="storefront-grid">
             <article v-for="product in filteredProducts" :key="product.public_id" class="storefront-product" :class="{ 'storefront-product-unavailable': !isAvailable(product) }">
               <RouterLink :to="`/${store.slug}/products/${product.slug}`" class="storefront-product-link"><div class="storefront-product-image"><img v-if="image(product)" :src="image(product)" :alt="product.media[0]?.alt_text || product.name" loading="lazy" /><span v-else>No image</span><span v-if="hasDiscount(product)" class="storefront-sale-badge">Sale</span><span v-if="!isAvailable(product)" class="storefront-unavailable-badge">Not Available</span></div><div class="storefront-product-info"><small v-if="product.category">{{ product.category.name }}</small><h3>{{ product.name }}</h3><div class="storefront-product-price"><strong>{{ money(product.price_minor, product.currency) }}</strong><del v-if="hasDiscount(product)">{{ money(product.compare_at_price_minor!, product.currency) }}</del></div></div></RouterLink>
-              <div class="storefront-product-action"><button v-if="!hasVariants(product) && isAvailable(product)" class="storefront-quick-add" type="button" :disabled="addingProduct === product.public_id" @click="addProduct(product)">{{ addingProduct === product.public_id ? 'Adding…' : addedProduct === product.public_id ? 'Added to cart ✓' : '+ Add to cart' }}</button><span v-else-if="!isAvailable(product)" class="storefront-quick-add storefront-unavailable-action" aria-disabled="true">Not Available</span><RouterLink v-else :to="`/${store.slug}/products/${product.slug}`" class="storefront-quick-add storefront-options-link">Choose options</RouterLink></div>
+              <div class="storefront-product-action">
+                <template v-if="!hasVariants(product) && isAvailable(product)">
+                  <div v-if="cartItemFor(product)" class="storefront-product-quantity" :class="{ busy: quantityBusy === cartItemFor(product)?.public_id }" aria-label="Adjust quantity">
+                    <button type="button" aria-label="Decrease quantity" :disabled="quantityBusy === cartItemFor(product)?.public_id" @click="changeProductQuantity(product, -1)">−</button>
+                    <span aria-live="polite">{{ cartItemFor(product)?.quantity }}</span>
+                    <button type="button" aria-label="Increase quantity" :disabled="quantityBusy === cartItemFor(product)?.public_id || (product.inventory_tracking && (cartItemFor(product)?.quantity || 0) >= product.inventory_quantity)" @click="changeProductQuantity(product, 1)">+</button>
+                  </div>
+                  <button v-else class="storefront-quick-add" type="button" :disabled="addingProduct === product.public_id" @click="addProduct(product)">{{ addingProduct === product.public_id ? 'Adding…' : addedProduct === product.public_id ? 'Added to cart ✓' : '+ Add to cart' }}</button>
+                </template>
+                <span v-else-if="!isAvailable(product)" class="storefront-quick-add storefront-unavailable-action" aria-disabled="true">Not Available</span>
+                <RouterLink v-else :to="`/${store.slug}/products/${product.slug}`" class="storefront-quick-add storefront-options-link">Choose options</RouterLink>
+              </div>
             </article>
           </div>
           <div v-else-if="searchQuery || selectedCategory" class="storefront-empty storefront-empty-search"><div class="storefront-empty-icon">⌕</div><h2>No products found</h2><p>Try another search or browse a different category.</p><button class="button button-secondary" type="button" @click="searchQuery = ''; selectedCategory = ''">Clear filters</button></div>
