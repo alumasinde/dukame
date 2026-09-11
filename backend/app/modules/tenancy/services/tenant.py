@@ -13,6 +13,7 @@ from app.core.config import settings
 from app.core.time import utc_now
 from app.modules.auth.models.identity import User
 from app.modules.catalogue.models.store import Store
+from app.modules.commerce.models.payment_method import PaymentMethod
 from app.modules.rbac.models.rbac import Permission, TenantRole, TenantRolePermission
 from app.modules.subscriptions.models.subscription import Plan, Subscription, SubscriptionEvent
 from app.modules.tenancy.models.tenant import Tenant, TenantUser
@@ -20,9 +21,9 @@ from app.modules.tenancy.models.tenant import Tenant, TenantUser
 DEFAULT_ROLES = (("Owner", "owner"), ("Administrator", "admin"), ("Manager", "manager"), ("Staff", "staff"))
 DEFAULT_ROLE_PERMISSIONS = {
     "owner": None,
-    "admin": {"tenant.read", "tenant.manage", "members.read", "members.manage", "roles.read", "roles.manage", "subscription.read", "account.read", "account.manage"},
-    "manager": {"tenant.read", "members.read", "roles.read", "subscription.read", "account.read"},
-    "staff": {"tenant.read", "account.read"},
+    "admin": {"tenant.read", "tenant.manage", "members.read", "members.manage", "roles.read", "roles.manage", "subscription.read", "account.read", "account.manage", "payments.read", "payments.manage"},
+    "manager": {"tenant.read", "members.read", "roles.read", "subscription.read", "account.read", "payments.read", "payments.manage"},
+    "staff": {"tenant.read", "account.read", "payments.read"},
 }
 
 
@@ -67,6 +68,7 @@ async def create_tenant(db: AsyncSession, user: User, name: str, slug: str | Non
     store = Store(public_id=uuid.uuid4().hex, tenant_id=tenant.id, name=business_name, slug=tenant_slug, status="active", currency="KES")
     db.add(store)
     await db.flush()
+    db.add(PaymentMethod(public_id=uuid.uuid4().hex, store_id=store.id, code="cash", name="Cash", is_enabled=True, sort_order=10, instructions="Pay the store in cash when your order is delivered or collected."))
     owner_role = await ensure_default_roles(db, tenant.id)
     db.add(TenantUser(tenant_id=tenant.id, user_id=user.id, role="owner", role_id=owner_role.id, status="active"))
     start = utc_now()
