@@ -20,5 +20,6 @@
 @import './modules/storefront-payment.css';
 @import './modules/commerce.css';
 @import './modules/order-payment.css';
+@import './modules/payments.css';
 @import './modules/order-tracking.css';
 @import './responsive.css';
