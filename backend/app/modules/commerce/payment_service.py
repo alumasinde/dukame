@@ -50,6 +50,7 @@ class PaymentService:
     async def prepare_order_payment(self, store: Store, order: Order, method_public_id: str | None) -> Payment:
         method = await self._select_method(store.id, method_public_id)
         payment = Payment(public_id=secrets.token_hex(16), store_id=store.id, order_id=order.id, payment_method_id=method.id, status="pending", amount_minor=order.total_minor, currency=order.currency, customer_phone=order.customer_phone)
+        payment.payment_method = method
         self.db.add(payment)
         await self.db.flush()
         return payment
@@ -60,7 +61,7 @@ class PaymentService:
             raise HTTPException(status_code=404, detail="Payment not found")
         if payment.status in {"paid", "refunded", "partially_refunded"}:
             return payment
-        if payment.payment_method.code == "cash":
+        if payment.payment_method.code in {"cash", "card"}:
             return payment
         if payment.payment_method.code != "mpesa":
             raise HTTPException(status_code=422, detail="This payment method is not supported yet")
@@ -116,7 +117,7 @@ class PaymentService:
     async def create_method(self, user: User, tenant_public_id: str, code: str, name: str, instructions: str | None, enabled: bool, config: dict[str, str] | None) -> tuple[PaymentMethod, str | None, str | None]:
         store = await resolve_store(self.db, user, tenant_public_id, "payments.manage")
         normalized_code = code.strip().lower()
-        if normalized_code not in {"cash", "mpesa"}:
+        if normalized_code not in {"cash", "mpesa", "card"}:
             raise HTTPException(status_code=422, detail="Unsupported payment method")
         if await self.db.scalar(select(PaymentMethod.id).where(PaymentMethod.store_id == store.id, PaymentMethod.code == normalized_code)):
             raise HTTPException(status_code=409, detail="Payment method already exists")
@@ -129,7 +130,9 @@ class PaymentService:
             callback_token, callback_hash = new_callback_token()
             encrypted = encrypt_config({**config, "callback_token": callback_token})
             callback_url = self._callback_url(callback_token)
-        method = PaymentMethod(public_id=secrets.token_hex(16), store_id=store.id, code=normalized_code, name=name.strip(), is_enabled=enabled, sort_order=20, instructions=instructions.strip() if instructions else None, config_encrypted=encrypted, callback_token_hash=callback_hash)
+        default_instructions = "Accept card payments using your card terminal or configured card processor." if normalized_code == "card" else instructions
+        sort_order = {"cash": 10, "mpesa": 20, "card": 30}[normalized_code]
+        method = PaymentMethod(public_id=secrets.token_hex(16), store_id=store.id, code=normalized_code, name=name.strip(), is_enabled=enabled, sort_order=sort_order, instructions=default_instructions.strip() if default_instructions else None, config_encrypted=encrypted, callback_token_hash=callback_hash)
         self.db.add(method)
         await self.db.commit()
         return method, callback_token, callback_url
