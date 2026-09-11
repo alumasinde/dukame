@@ -1,0 +1,8 @@
+.shop-list { display: grid; gap: 8px; }
+.shop-card { border: 1px solid var(--line); border-radius: var(--radius-md); background: #fff; overflow: hidden; }
+.shop-card.selected { border-color: #b9ded7; background: #f2faf8; }
+.shop-card .shop-row { border: 0; border-radius: 0; margin: 0; background: transparent; }
+.shop-card .shop-row:hover { background: #f2faf8; }
+.storefront-link { display: flex; align-items: center; justify-content: space-between; padding: 9px 12px 10px 58px; border-top: 1px solid #e6eeec; color: var(--primary); font-size: 10px; font-weight: 750; text-decoration: none; }
+.storefront-link:hover { background: #f8fcfb; text-decoration: none; }
+.storefront-link span { font-size: 12px; }
