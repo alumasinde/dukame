@@ -14,6 +14,7 @@ class StorefrontCategory(BaseModel):
     public_id: str
     name: str
     slug: str
+    parent_public_id: str | None = None
 
 
 class StorefrontProduct(BaseModel):
