@@ -24,16 +24,7 @@ from app.modules.commerce.payment_security import callback_token_hash, decrypt_c
 
 
 def payment_response(payment: Payment) -> dict[str, object]:
-    return {
-        "public_id": payment.public_id,
-        "status": payment.status,
-        "amount_minor": payment.amount_minor,
-        "currency": payment.currency,
-        "method": {"public_id": payment.payment_method.public_id, "code": payment.payment_method.code, "name": payment.payment_method.name},
-        "failure_reason": payment.failure_reason,
-        "paid_at": payment.paid_at.isoformat() if payment.paid_at else None,
-        "provider_reference": payment.provider_reference,
-    }
+    return {"public_id": payment.public_id, "status": payment.status, "amount_minor": payment.amount_minor, "currency": payment.currency, "method": {"public_id": payment.payment_method.public_id, "code": payment.payment_method.code, "name": payment.payment_method.name}, "failure_reason": payment.failure_reason, "paid_at": payment.paid_at.isoformat() if payment.paid_at else None, "provider_reference": payment.provider_reference}
 
 
 class PaymentService:
@@ -159,7 +150,7 @@ class PaymentService:
             amount = metadata.get("Amount")
             receipt = str(metadata.get("MpesaReceiptNumber") or "")
             phone = str(metadata.get("PhoneNumber") or "")
-            if not receipt or amount is None or int(round(float(amount) * 100)) != attempt.payment.amount_minor:
+            if not receipt or amount is None or round(float(amount) * 100) != attempt.payment.amount_minor:
                 attempt.status = "failed"
                 attempt.provider_response_code = result_code
                 attempt.provider_response_message = "Payment callback amount or receipt could not be verified"
