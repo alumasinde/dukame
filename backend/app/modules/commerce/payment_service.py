@@ -29,7 +29,21 @@ from app.modules.commerce.payment_security import callback_token_hash, decrypt_c
 
 
 def payment_response(payment: Payment) -> dict[str, object]:
-    return {"public_id": payment.public_id, "status": payment.status, "amount_minor": payment.amount_minor, "currency": payment.currency, "method": {"public_id": payment.payment_method.public_id, "code": payment.payment_method.code, "name": payment.payment_method.name}, "failure_reason": payment.failure_reason, "paid_at": payment.paid_at.isoformat() if payment.paid_at else None, "provider_reference": payment.provider_reference}
+    config = decrypt_config(payment.payment_method.config_encrypted) if payment.payment_method.config_encrypted else {}
+    payment_type = config.get("payment_type")
+    if payment.payment_method.code == "mpesa" and not payment_type:
+        payment_type = "stk_push"
+    elif payment.payment_method.code == "mpesa_paybill" and not payment_type:
+        payment_type = "paybill"
+    method = {
+        "public_id": payment.payment_method.public_id,
+        "code": "mpesa" if payment.payment_method.code == "mpesa_paybill" else payment.payment_method.code,
+        "name": payment.payment_method.name,
+        "is_enabled": payment.payment_method.is_enabled,
+        "payment_type": str(payment_type) if payment_type else None,
+        "instructions": payment.payment_method.instructions,
+    }
+    return {"public_id": payment.public_id, "status": payment.status, "amount_minor": payment.amount_minor, "currency": payment.currency, "method": method, "failure_reason": payment.failure_reason, "paid_at": payment.paid_at.isoformat() if payment.paid_at else None, "provider_reference": payment.provider_reference}
 
 
 def payment_list_response(payment: Payment) -> dict[str, object]:
@@ -77,7 +91,8 @@ class PaymentService:
         payment.failure_reason = None
         await self.db.commit()
         try:
-            result = await client.stk_push(payment.amount_minor, payment.customer_phone, f"Order {payment.order_id}")
+            account_reference = str(config.get("account_reference") or "DukaMe Order").strip()[:12]
+            result = await client.stk_push(payment.amount_minor, payment.customer_phone, account_reference)
         except (MpesaProviderError, HTTPException) as exc:
             payment = await self._load_payment(payment.public_id)
             if payment is None:
@@ -279,13 +294,36 @@ class PaymentService:
 
     @staticmethod
     def _validate_mpesa_config(config: dict[str, str] | None) -> None:
-        required = {"consumer_key", "consumer_secret", "shortcode", "passkey", "environment", "transaction_type"}
-        if not config or any(not str(config.get(key, "")).strip() for key in required):
-            raise HTTPException(status_code=422, detail="Complete M-Pesa configuration is required")
-        if config["environment"] not in {"sandbox", "production"}:
-            raise HTTPException(status_code=422, detail="Invalid M-Pesa environment")
-        if config["transaction_type"] not in {"CustomerPayBillOnline", "CustomerBuyGoodsOnline"}:
-            raise HTTPException(status_code=422, detail="Invalid M-Pesa transaction type")
+        if not config:
+            raise HTTPException(status_code=422, detail="M-Pesa configuration is missing")
+        required = {
+            "consumer_key": "Consumer Key",
+            "consumer_secret": "Consumer Secret",
+            "shortcode": "Business Shortcode",
+            "passkey": "Passkey",
+        }
+        missing = [label for key, label in required.items() if not str(config.get(key, "")).strip()]
+        if missing:
+            raise HTTPException(status_code=422, detail=f"Missing M-Pesa fields: {', '.join(missing)}")
+        environment = str(config.get("environment", "")).strip().lower()
+        if environment not in {"sandbox", "production"}:
+            raise HTTPException(status_code=422, detail="Choose Sandbox or Production for the M-Pesa environment")
+        transaction_type = str(config.get("transaction_type", "")).strip()
+        if transaction_type not in {"CustomerPayBillOnline", "CustomerBuyGoodsOnline"}:
+            raise HTTPException(status_code=422, detail="Choose PayBill or Buy Goods for the transaction type")
+        shortcode = str(config["shortcode"]).strip()
+        if not shortcode.isdigit() or not 5 <= len(shortcode) <= 8:
+            raise HTTPException(status_code=422, detail="Business Shortcode must be 5–8 digits")
+        account_reference = str(config.get("account_reference", "")).strip()
+        if not account_reference:
+            raise HTTPException(status_code=422, detail="Account reference is required")
+        if len(account_reference) > 12:
+            raise HTTPException(status_code=422, detail="Account reference must be 12 characters or fewer")
+        transaction_desc = str(config.get("transaction_desc", "")).strip()
+        if not transaction_desc:
+            raise HTTPException(status_code=422, detail="Transaction description is required")
+        if len(transaction_desc) > 13:
+            raise HTTPException(status_code=422, detail="Transaction description must be 13 characters or fewer")
 
     @staticmethod
     def _callback_url(callback_token: str) -> str:
