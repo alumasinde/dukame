@@ -19,7 +19,12 @@ class ProductMediaService:
         self.media = ProductMediaRepository(db)
 
     async def _product(self, store_id: int, public_id: str) -> Product:
-        product = await self.db.scalar(select(Product).where(Product.store_id == store_id, Product.public_id == public_id))
+        product = await self.db.scalar(
+            select(Product).where(
+                Product.store_id == store_id,
+                Product.public_id == public_id,
+            )
+        )
         if product is None:
             raise HTTPException(status_code=404, detail="Product not found")
         return product
@@ -29,10 +34,21 @@ class ProductMediaService:
         product = await self._product(store.id, product_public_id)
         return await self.media.list(product.id)
 
-    async def create(self, user: User, tenant_public_id: str, product_public_id: str, payload: ProductMediaCreate):
+    async def create(
+        self,
+        user: User,
+        tenant_public_id: str,
+        product_public_id: str,
+        payload: ProductMediaCreate,
+    ):
         store = await resolve_store(self.db, user, tenant_public_id, "catalogue.manage")
         product = await self._product(store.id, product_public_id)
-        media = await self.media.create(public_id=uuid.uuid4().hex, store_id=store.id, product_id=product.id, **payload.model_dump(mode="json"))
+        media = await self.media.create(
+            public_id=uuid.uuid4().hex,
+            store_id=store.id,
+            product_id=product.id,
+            **payload.model_dump(mode="json"),
+        )
         await self.db.commit()
         return await self.media.get(product.id, media.public_id)
 
@@ -48,7 +64,11 @@ class ProductMediaService:
     ):
         store = await resolve_store(self.db, user, tenant_public_id, "catalogue.manage")
         product = await self._product(store.id, product_public_id)
-        relative_url = await save_product_image(file, tenant_public_id, product_public_id)
+        relative_url = await save_product_image(
+            file,
+            tenant_public_id,
+            product_public_id,
+        )
         try:
             payload = ProductMediaCreate(
                 url=f"{base_url.rstrip('/')}{relative_url}",
@@ -70,22 +90,41 @@ class ProductMediaService:
             raise
         return await self.media.get(product.id, media.public_id)
 
-    async def update(self, user: User, tenant_public_id: str, product_public_id: str, public_id: str, payload: ProductMediaUpdate):
+    async def update(
+        self,
+        user: User,
+        tenant_public_id: str,
+        product_public_id: str,
+        public_id: str,
+        payload: ProductMediaUpdate,
+    ):
         store = await resolve_store(self.db, user, tenant_public_id, "catalogue.manage")
         product = await self._product(store.id, product_public_id)
         media = await self.media.get(product.id, public_id)
         if media is None:
             raise HTTPException(status_code=404, detail="Media item not found")
-        for key, value in payload.model_dump(exclude_unset=True, mode="json").items():
+        for key, value in payload.model_dump(
+            exclude_unset=True,
+            mode="json",
+        ).items():
             setattr(media, key, value)
         try:
             await self.db.commit()
         except IntegrityError:
             await self.db.rollback()
-            raise HTTPException(status_code=409, detail="Media could not be updated") from None
+            raise HTTPException(
+                status_code=409,
+                detail="Media could not be updated",
+            ) from None
         return await self.media.get(product.id, media.public_id)
 
-    async def delete(self, user: User, tenant_public_id: str, product_public_id: str, public_id: str) -> None:
+    async def delete(
+        self,
+        user: User,
+        tenant_public_id: str,
+        product_public_id: str,
+        public_id: str,
+    ) -> None:
         store = await resolve_store(self.db, user, tenant_public_id, "catalogue.manage")
         product = await self._product(store.id, product_public_id)
         media = await self.media.get(product.id, public_id)
