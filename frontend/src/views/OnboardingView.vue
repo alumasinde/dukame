@@ -123,7 +123,7 @@ onMounted(loadDraft)
           {{ step === 1 ? 'Start with your business.' : step === 2 ? 'Choose your shop link.' : 'Everything looks good.' }}
         </h1>
         <p>
-          {{ step === 1 ? 'Set the identity of your DukaMe shop. You can add your catalogue, payments and other settings later from the dashboard.' : step === 2 ? 'Your shop link is what customers will use to find your storefront.' : 'Review the basics, create your shop, then continue building it from your dashboard.' }}
+          {{ step === 1 ? 'Set the identity of your DukaMe shop.' : step === 2 ? 'Your shop link is what customers will use to find your storefront.' : 'Review the basics, create your shop, then continue building it from your dashboard.' }}
         </p>
       </div>
 
@@ -137,7 +137,7 @@ onMounted(loadDraft)
           </div>
           <div class="field-group">
             <label for="shop-name">Shop name</label>
-            <input id="shop-name" v-model.trim="shopName" type="text" autocomplete="organization" placeholder="e.g. Glee Hotel Limited" maxlength="255" required autofocus />
+            <input id="shop-name" v-model.trim="shopName" type="text" autocomplete="organization" placeholder="e.g. Jane's Boutique" maxlength="255" required autofocus />
             <small>Use the business name your customers already know.</small>
           </div>
         </div>
@@ -151,7 +151,7 @@ onMounted(loadDraft)
             <label for="shop-slug">Shop link</label>
             <div class="input-prefix">
               <span>dukame.shop/</span>
-              <input id="shop-slug" v-model.trim="shopSlug" type="text" maxlength="100" pattern="[a-z0-9]+" autocomplete="off" placeholder="gleehotellimited" autofocus />
+              <input id="shop-slug" v-model.trim="shopSlug" type="text" maxlength="100" pattern="[a-z0-9]+" autocomplete="off" placeholder="janesboutique" autofocus />
             </div>
             <small>Lowercase letters and numbers only.</small>
           </div>
