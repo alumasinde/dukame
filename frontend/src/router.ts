@@ -28,7 +28,7 @@ const router = createRouter({
         { path: 'catalogue/options', name: 'catalogue-options', component: () => import('./views/CatalogueOptionsView.vue') },
         { path: 'orders', name: 'orders', component: () => import('./views/OrdersView.vue') },
         { path: 'customers', name: 'customers', component: phase3View, props: { title: 'Customers', description: 'Customer profiles, purchase history and customer activity will be managed here.' } },
-        { path: 'payments', name: 'payments', component: phase3View, props: { title: 'Payments', description: 'Payment methods, transactions and payment status will be managed here as commerce payments are introduced.' } },
+        { path: 'payments', name: 'payments', component: () => import('./views/PaymentsView.vue') },
         { path: 'analytics', name: 'analytics', component: phase3View, props: { title: 'Analytics', description: 'Sales, product, customer and business performance analytics will be added as commerce data becomes available.' } },
       ],
     },
