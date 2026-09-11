@@ -29,6 +29,7 @@ class Product(Base):
     store: Mapped["Store"] = relationship(back_populates="products")
     category: Mapped["Category | None"] = relationship(back_populates="products")
     variants: Mapped[list["ProductVariant"]] = relationship(back_populates="product", cascade="all, delete-orphan")
+    media: Mapped[list["ProductMedia"]] = relationship(back_populates="product", cascade="all, delete-orphan", order_by="ProductMedia.sort_order")
 
     __table_args__ = (
         UniqueConstraint("store_id", "slug", name="uq_products_store_slug"),
