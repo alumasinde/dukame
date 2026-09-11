@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { catalogueApi, type Category, type ProductMedia, type ProductOption, type ProductVariant } from '../lib/catalogue'
 import { useAuthStore } from '../stores/auth'
@@ -20,11 +20,14 @@ const media = ref<ProductMedia[]>([])
 const loading = ref(false)
 const saving = ref(false)
 const generating = ref(false)
+const uploading = ref(false)
 const error = ref('')
 const success = ref('')
 const form = ref({ name: '', slug: '', description: '', category_public_id: '', sku: '', price: '', compare_at_price: '', currency: '', inventory_tracking: true, inventory_quantity: 0, status: 'active' })
-const mediaUrl = ref('')
+const selectedFile = ref<File | null>(null)
+const previewUrl = ref('')
 const mediaAlt = ref('')
+const fileInput = ref<HTMLInputElement | null>(null)
 const selectedValues = ref<Record<string, string[]>>({})
 
 function slugify(value: string) { return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 100) }
@@ -39,6 +42,34 @@ const generatedCombinations = computed(() => combinations(selectedGroups.value))
 const existingKeys = computed(() => new Set(variants.value.map(variant => combinationKey(variant.option_value_public_ids))))
 const missingCombinations = computed(() => generatedCombinations.value.filter(ids => !existingKeys.value.has(combinationKey(ids))))
 function setInitialSelection() { selectedValues.value = Object.fromEntries(options.value.map(option => [option.public_id, option.values.filter(value => value.status === 'active').map(value => value.public_id)])) }
+
+function selectImage(file: File | undefined) {
+  if (!file) return
+  if (!['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(file.type)) {
+    error.value = 'Choose a JPEG, PNG, GIF, or WebP image.'
+    return
+  }
+  if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)
+  selectedFile.value = file
+  previewUrl.value = URL.createObjectURL(file)
+  error.value = ''
+}
+
+function onFileChange(event: Event) {
+  selectImage((event.target as HTMLInputElement).files?.[0])
+}
+
+function onDrop(event: DragEvent) {
+  event.preventDefault()
+  selectImage(event.dataTransfer?.files?.[0])
+}
+
+function clearSelectedImage() {
+  if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)
+  selectedFile.value = null
+  previewUrl.value = ''
+  if (fileInput.value) fileInput.value.value = ''
+}
 
 async function load() {
   if (!tenant.value || !store.value) return
@@ -69,17 +100,25 @@ async function saveProduct() {
   } catch (err: any) { error.value = message(err, 'We could not save the product.') }
   finally { saving.value = false }
 }
-async function addMedia() {
-  if (!tenant.value || !productId.value || isNew.value || !mediaUrl.value.trim()) return
-  error.value = ''; saving.value = true
-  try { const response = await catalogueApi.createMedia(tenant.value.public_id, productId.value, { url: mediaUrl.value.trim(), alt_text: mediaAlt.value.trim() || null, media_type: 'image', sort_order: media.value.length, status: 'active' }); media.value = [...media.value, response.data]; mediaUrl.value = ''; mediaAlt.value = ''; success.value = 'Image added.' }
-  catch (err: any) { error.value = message(err, 'We could not add the image.') }
-  finally { saving.value = false }
+
+async function uploadImage() {
+  if (!tenant.value || !productId.value || isNew.value || !selectedFile.value) return
+  error.value = ''; success.value = ''; uploading.value = true
+  try {
+    const response = await catalogueApi.uploadMedia(tenant.value.public_id, productId.value, selectedFile.value, mediaAlt.value.trim() || null, media.value.length)
+    media.value = [...media.value, response.data]
+    clearSelectedImage()
+    mediaAlt.value = ''
+    success.value = 'Image uploaded.'
+  } catch (err: any) { error.value = message(err, 'We could not upload the image.') }
+  finally { uploading.value = false }
 }
+
 async function deleteMedia(item: ProductMedia) {
   if (!tenant.value || !productId.value || !confirm('Remove this image from the product?')) return
   try { await catalogueApi.deleteMedia(tenant.value.public_id, productId.value, item.public_id); media.value = media.value.filter(value => value.public_id !== item.public_id); success.value = 'Image removed.' } catch (err: any) { error.value = message(err, 'We could not remove the image.') }
 }
+
 async function generateVariants() {
   if (!tenant.value || !productId.value || isNew.value || !missingCombinations.value.length) return
   generating.value = true; error.value = ''; success.value = ''
@@ -93,6 +132,7 @@ async function generateVariants() {
   } catch (err: any) { error.value = message(err, 'We could not generate the variants.') }
   finally { generating.value = false }
 }
+
 async function updateVariant(variant: ProductVariant, field: 'sku' | 'price_minor' | 'inventory_quantity', value: string) {
   if (!tenant.value || !productId.value) return
   const payload: Record<string, unknown> = { sku: variant.sku, price_minor: variant.price_minor, compare_at_price_minor: variant.compare_at_price_minor, inventory_tracking: variant.inventory_tracking, inventory_quantity: variant.inventory_quantity, status: variant.status, option_value_public_ids: variant.option_value_public_ids }
@@ -102,11 +142,14 @@ async function updateVariant(variant: ProductVariant, field: 'sku' | 'price_mino
   try { const response = await catalogueApi.updateVariant(tenant.value.public_id, productId.value, variant.public_id, payload); variants.value = variants.value.map(item => item.public_id === variant.public_id ? response.data : item) }
   catch (err: any) { error.value = message(err, 'We could not update this variant.') }
 }
+
 async function removeVariant(variant: ProductVariant) {
   if (!tenant.value || !productId.value || !confirm('Delete this variant?')) return
   try { await catalogueApi.deleteVariant(tenant.value.public_id, productId.value, variant.public_id); variants.value = variants.value.filter(item => item.public_id !== variant.public_id); success.value = 'Variant deleted.' } catch (err: any) { error.value = message(err, 'We could not delete the variant.') }
 }
+
 watch(store, value => { if (value) load() }, { immediate: true })
+onBeforeUnmount(() => { if (previewUrl.value) URL.revokeObjectURL(previewUrl.value) })
 </script>
 
 <template>
@@ -117,7 +160,7 @@ watch(store, value => { if (value) load() }, { immediate: true })
       <section class="editor-grid">
         <div class="editor-main">
           <section class="panel editor-card"><div class="panel-heading"><div><h3>Product details</h3><p>Give customers the information they need to understand the product.</p></div></div><div class="form-grid"><label class="form-span-2">Product name<input v-model="form.name" @blur="form.slug ||= slugify(form.name)" required placeholder="e.g. Classic Cotton T-Shirt" /></label><label>Slug<input v-model="form.slug" required /></label><label>SKU<input v-model="form.sku" placeholder="Optional" /></label><label class="form-span-2">Description<textarea v-model="form.description" rows="6" placeholder="Describe the product, materials, size, care and anything else customers should know." /></label></div></section>
-          <section class="panel editor-card"><div class="panel-heading"><div><h3>Images</h3><p>Add product images using their hosted URL. The first image is the primary image.</p></div></div><div v-if="!isNew" class="media-add"><input v-model="mediaUrl" type="url" placeholder="https://example.com/product-image.jpg" /><input v-model="mediaAlt" placeholder="Alt text" /><button class="button button-primary" :disabled="saving || !mediaUrl" @click="addMedia">Add image</button></div><div v-if="isNew" class="mini-empty">Save the product first, then add images.</div><div v-if="media.length" class="media-grid"><article v-for="item in media" :key="item.public_id" class="media-item"><img :src="item.url" :alt="item.alt_text || form.name" /><div><span v-if="item.sort_order === 0" class="badge">Primary</span><p>{{ item.alt_text || 'No alt text' }}</p><button class="button button-small button-danger" @click="deleteMedia(item)">Remove</button></div></article></div><div v-else-if="!isNew" class="mini-empty">No images yet. A clear primary product image makes the catalogue easier to scan.</div></section>
+          <section class="panel editor-card"><div class="panel-heading"><div><h3>Images</h3><p>Upload clear product photos. The first image is used as the primary image.</p></div></div><div v-if="!isNew" class="media-upload-area"><button v-if="!selectedFile" type="button" class="media-dropzone" @click="fileInput?.click()" @dragover.prevent @drop="onDrop"><span class="media-upload-icon">↑</span><strong>Choose an image</strong><small>Drag and drop here, or click to browse</small><small>JPEG, PNG, GIF or WebP</small></button><div v-else class="media-upload-preview"><img :src="previewUrl" :alt="selectedFile.name" /><div class="media-upload-details"><strong>{{ selectedFile.name }}</strong><small>{{ Math.ceil(selectedFile.size / 1024) }} KB</small><label>Alt text<input v-model="mediaAlt" placeholder="Describe the image" /></label><div class="media-upload-actions"><button class="button button-secondary button-small" type="button" @click="clearSelectedImage">Choose another</button><button class="button button-primary" type="button" :disabled="uploading" @click="uploadImage">{{ uploading ? 'Uploading…' : 'Upload image' }}</button></div></div></div><input ref="fileInput" class="sr-only" type="file" accept="image/jpeg,image/png,image/gif,image/webp" @change="onFileChange" /></div><div v-if="isNew" class="mini-empty">Save the product first, then upload images.</div><div v-if="media.length" class="media-grid"><article v-for="item in media" :key="item.public_id" class="media-item"><img :src="item.url" :alt="item.alt_text || form.name" /><div><span v-if="item.sort_order === 0" class="badge">Primary</span><p>{{ item.alt_text || 'No alt text' }}</p><button class="button button-small button-danger" @click="deleteMedia(item)">Remove</button></div></article></div><div v-else-if="!isNew" class="mini-empty">No images yet. A clear primary product image makes the catalogue easier to scan.</div></section>
           <section v-if="!isNew" class="panel editor-card"><div class="panel-heading"><div><h3>Variants</h3><p>Select values below and DukaMe will create every missing combination.</p></div><button class="button button-primary" :disabled="generating || !missingCombinations.length" @click="generateVariants">{{ generating ? 'Generating…' : `Generate ${missingCombinations.length || ''} variant${missingCombinations.length === 1 ? '' : 's'}` }}</button></div><div class="option-picker"><div v-for="option in options" :key="option.public_id" class="option-group"><strong>{{ option.name }}</strong><div class="value-picker"><label v-for="value in option.values" :key="value.public_id" class="choice"><input v-model="selectedValues[option.public_id]" type="checkbox" :value="value.public_id" /> <span>{{ value.name }}</span></label></div></div><div v-if="!options.length" class="mini-empty">Create product options first, such as Size or Colour.</div></div><div v-if="generatedCombinations.length" class="combination-note">{{ generatedCombinations.length }} possible combination{{ generatedCombinations.length === 1 ? '' : 's' }} · {{ missingCombinations.length }} not yet created</div><div v-if="variants.length" class="variant-list"><div class="variant-row variant-head"><span>Combination</span><span>SKU</span><span>Price override</span><span>Stock</span><span></span></div><div v-for="variant in variants" :key="variant.public_id" class="variant-row"><strong>{{ variant.option_value_public_ids.length ? variant.option_value_public_ids.map(optionValueName).join(' · ') : 'Default' }}</strong><input :value="variant.sku || ''" placeholder="SKU" @change="updateVariant(variant, 'sku', inputValue($event))" /><input :value="variant.price_minor == null ? '' : (variant.price_minor / 100).toFixed(2)" type="number" min="0" step="0.01" placeholder="Base price" @change="updateVariant(variant, 'price_minor', inputValue($event))" /><input :value="variant.inventory_quantity" type="number" min="0" @change="updateVariant(variant, 'inventory_quantity', inputValue($event))" /><button class="button button-small button-danger" @click="removeVariant(variant)">Delete</button></div></div><div v-else class="mini-empty">No variants yet. Simple products do not need variants.</div></section>
         </div>
         <aside class="editor-side">
