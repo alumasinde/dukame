@@ -1,14 +1,18 @@
 from __future__ import annotations
 
+import secrets
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.modules.auth.models.identity import User
 from app.modules.auth.security import get_current_user
 from app.modules.catalogue.services.context import resolve_store
+from app.modules.commerce.models.payment import Payment
 from app.modules.commerce.models.payment_method import PaymentMethod
 from app.modules.commerce.payment_service import PaymentService, payment_list_response, payment_response
 from app.modules.commerce.schemas import PaymentListItemResponse, PaymentMethodCreate, PaymentMethodResponse, PaymentMethodUpdate, PaymentResponse
@@ -36,6 +40,14 @@ async def list_payment_methods(tenant_public_id: str, user: User = Depends(get_c
 
 @router.post("/tenants/{tenant_public_id}/payment-methods", response_model=PaymentMethodResponse)
 async def create_payment_method(tenant_public_id: str, payload: PaymentMethodCreate, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> PaymentMethodResponse:
+    if payload.code.strip().lower() == "card":
+        store = await resolve_store(db, user, tenant_public_id, "payments.manage")
+        if await db.scalar(select(PaymentMethod.id).where(PaymentMethod.store_id == store.id, PaymentMethod.code == "card")):
+            raise HTTPException(status_code=409, detail="Payment method already exists")
+        method = PaymentMethod(public_id=secrets.token_hex(16), store_id=store.id, code="card", name=payload.name.strip(), is_enabled=payload.is_enabled, sort_order=30, instructions=payload.instructions.strip() if payload.instructions else "Accept card payments using your card terminal or configured card processor.")
+        db.add(method)
+        await db.commit()
+        return method_response(method)
     method, callback_token, callback_url = await PaymentService(db).create_method(user, tenant_public_id, payload.code, payload.name, payload.instructions, payload.is_enabled, payload.config)
     return method_response(method, callback_url, callback_token)
 
@@ -67,6 +79,27 @@ async def retry_payment(tenant_public_id: str, payment_public_id: str, user: Use
 @router.patch("/tenants/{tenant_public_id}/payments/{payment_public_id}/cash-paid", response_model=PaymentResponse)
 async def mark_cash_payment_paid(tenant_public_id: str, payment_public_id: str, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> PaymentResponse:
     payment = await PaymentService(db).set_cash_paid(user, tenant_public_id, payment_public_id)
+    return PaymentResponse.model_validate(payment_response(payment))
+
+
+@router.patch("/tenants/{tenant_public_id}/payments/{payment_public_id}/manual-paid", response_model=PaymentResponse)
+async def mark_manual_payment_paid(tenant_public_id: str, payment_public_id: str, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> PaymentResponse:
+    store = await resolve_store(db, user, tenant_public_id, "payments.manage")
+    payment = await db.scalar(select(Payment).where(Payment.public_id == payment_public_id, Payment.store_id == store.id).options())
+    if payment is None:
+        raise HTTPException(status_code=404, detail="Payment not found")
+    if payment.payment_method.code not in {"cash", "card"}:
+        raise HTTPException(status_code=422, detail="Only cash or card payments can be manually marked paid")
+    if payment.status == "paid":
+        return PaymentResponse.model_validate(payment_response(payment))
+    if payment.status in {"refunded", "partially_refunded", "cancelled"}:
+        raise HTTPException(status_code=409, detail="Payment cannot be marked paid")
+    payment.status = "paid"
+    payment.paid_at = datetime.now(UTC)
+    payment.failure_reason = None
+    await PaymentService(db)._confirm_order_after_payment(payment)
+    await db.commit()
+    payment = await PaymentService(db)._load_payment(payment.public_id)
     return PaymentResponse.model_validate(payment_response(payment))
 
 
