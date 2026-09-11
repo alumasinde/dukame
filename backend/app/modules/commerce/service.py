@@ -25,6 +25,7 @@ from app.modules.commerce.models.order_status import OrderStatus
 from app.modules.commerce.models.order_status_history import OrderStatusHistory
 from app.modules.commerce.models.order_status_transition import OrderStatusTransition
 from app.modules.commerce.notifications import queue_order_sms
+from app.modules.commerce.payment_service import PaymentService
 from app.modules.commerce.schemas import CartItemAdd, CartItemUpdate, CheckoutRequest, OrderStatusUpdate
 from app.modules.commerce.tracking import tracking_token, tracking_token_hash
 
@@ -143,13 +144,23 @@ class CommerceService:
             if inventory_owner.inventory_tracking:
                 inventory_owner.inventory_quantity -= item.quantity
         await queue_order_sms(self.db, order, initial_status, store.name, store.slug)
+        payment = await PaymentService(self.db).prepare_order_payment(store, order, payload.payment_method_public_id)
         cart.checked_out_at = datetime.now(UTC)
         await self.db.commit()
+        if payment.payment_method.code == "mpesa":
+            try:
+                await PaymentService(self.db).initiate(payment.public_id)
+            except HTTPException:
+                payment = await PaymentService(self.db)._load_payment(payment.public_id)
+                if payment is not None and payment.status == "pending":
+                    payment.status = "failed"
+                    payment.failure_reason = "M-Pesa payment could not be initiated"
+                    await self.db.commit()
         return await self._load_order(order.id)
 
     async def list_orders(self, user: User, tenant_public_id: str, offset: int, limit: int, status_public_id: str | None) -> list[Order]:
         store = await resolve_store(self.db, user, tenant_public_id, "orders.read")
-        stmt = select(Order).options(selectinload(Order.status), selectinload(Order.items).selectinload(OrderItem.product), selectinload(Order.items).selectinload(OrderItem.variant)).where(Order.store_id == store.id).order_by(Order.created_at.desc(), Order.id.desc()).offset(offset).limit(limit)
+        stmt = select(Order).options(selectinload(Order.status), selectinload(Order.items).selectinload(OrderItem.product), selectinload(Order.items).selectinload(OrderItem.variant), selectinload(Order.payment).selectinload("payment_method")).where(Order.store_id == store.id).order_by(Order.created_at.desc(), Order.id.desc()).offset(offset).limit(limit)
         if status_public_id:
             stmt = stmt.join(Order.status).where(OrderStatus.public_id == status_public_id)
         return list((await self.db.scalars(stmt)).unique().all())
@@ -204,16 +215,7 @@ class CommerceService:
         expected_token = tracking_token(public_id)
         if not secrets.compare_digest(expected_token, token):
             raise HTTPException(status_code=404, detail="Order not found")
-        order = await self.db.scalar(
-            select(Order)
-            .options(
-                selectinload(Order.status),
-                selectinload(Order.items).selectinload(OrderItem.product),
-                selectinload(Order.items).selectinload(OrderItem.variant),
-                selectinload(Order.status_history).selectinload(OrderStatusHistory.status),
-            )
-            .where(Order.store_id == store.id, Order.public_id == public_id)
-        )
+        order = await self.db.scalar(select(Order).options(selectinload(Order.status), selectinload(Order.items).selectinload(OrderItem.product), selectinload(Order.items).selectinload(OrderItem.variant), selectinload(Order.status_history).selectinload(OrderStatusHistory.status), selectinload(Order.payment).selectinload("payment_method")).where(Order.store_id == store.id, Order.public_id == public_id))
         if order is None:
             raise HTTPException(status_code=404, detail="Order not found")
         if order.tracking_token_hash is not None and not secrets.compare_digest(order.tracking_token_hash, tracking_token_hash(token)):
@@ -275,10 +277,10 @@ class CommerceService:
         return await self.db.scalar(select(ProductVariant).where(ProductVariant.id == variant_id).with_for_update())
 
     async def _load_order(self, order_id: int) -> Order:
-        return await self.db.scalar(select(Order).options(selectinload(Order.status), selectinload(Order.items).selectinload(OrderItem.product), selectinload(Order.items).selectinload(OrderItem.variant)).where(Order.id == order_id))
+        return await self.db.scalar(select(Order).options(selectinload(Order.status), selectinload(Order.items).selectinload(OrderItem.product), selectinload(Order.items).selectinload(OrderItem.variant), selectinload(Order.payment).selectinload("payment_method")).where(Order.id == order_id))
 
     async def _load_order_by_public_id(self, store_id: int, public_id: str, lock: bool = False) -> Order | None:
-        stmt = select(Order).options(selectinload(Order.status), selectinload(Order.items).selectinload(OrderItem.product), selectinload(Order.items).selectinload(OrderItem.variant)).where(Order.store_id == store_id, Order.public_id == public_id)
+        stmt = select(Order).options(selectinload(Order.status), selectinload(Order.items).selectinload(OrderItem.product), selectinload(Order.items).selectinload(OrderItem.variant), selectinload(Order.payment).selectinload("payment_method")).where(Order.store_id == store_id, Order.public_id == public_id)
         if lock:
             stmt = stmt.with_for_update()
         return await self.db.scalar(stmt)
