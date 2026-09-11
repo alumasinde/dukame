@@ -1,4 +1,7 @@
+import uuid
+
 from fastapi import HTTPException
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.auth.models.identity import User
@@ -13,7 +16,27 @@ async def resolve_store(db: AsyncSession, user: User, tenant_public_id: str, per
     if tenant is None:
         raise HTTPException(status_code=404, detail="Tenant not found")
     await require_permission(db, user, tenant.id, permission)
-    store = await StoreRepository(db).get_by_tenant_id(tenant.id)
-    if store is None:
-        raise HTTPException(status_code=404, detail="Store not found")
+    repository = StoreRepository(db)
+    store = await repository.get_by_tenant_id(tenant.id)
+    if store is not None:
+        return store
+
+    store = Store(
+        public_id=uuid.uuid4().hex,
+        tenant_id=tenant.id,
+        name=tenant.name,
+        slug=tenant.slug,
+        status="active",
+        currency="KES",
+    )
+    db.add(store)
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        store = await repository.get_by_tenant_id(tenant.id)
+        if store is None:
+            raise HTTPException(status_code=409, detail="Store could not be created") from None
+        return store
+    await db.refresh(store)
     return store
