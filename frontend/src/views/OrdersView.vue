@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useAuthStore } from '../stores/auth'
-import { getNextOrderStatuses, getOrder, getOrderStatuses, getOrders, updateOrderStatus, type Order, type OrderStatus } from '../lib/cart'
+import { getNextOrderStatuses, getOrder, getOrderStatuses, getOrders, markCashPaymentPaid, updateOrderStatus, type Order, type OrderStatus } from '../lib/cart'
 
 const auth = useAuthStore()
 const orders = ref<Order[]>([])
@@ -11,6 +11,7 @@ const selectedOrder = ref<Order | null>(null)
 const selectedStatus = ref('')
 const loading = ref(true)
 const updating = ref(false)
+const markingPayment = ref(false)
 const error = ref('')
 const actionLoading = ref(false)
 const tenantId = computed(() => auth.activeTenant?.public_id || '')
@@ -56,6 +57,17 @@ async function changeStatus(statusId: string) {
   finally { updating.value = false; actionLoading.value = false }
 }
 
+async function markPaymentPaid() {
+  if (!tenantId.value || !selectedOrder.value?.payment || markingPayment.value) return
+  markingPayment.value = true; error.value = ''
+  try {
+    selectedOrder.value.payment = (await markCashPaymentPaid(tenantId.value, selectedOrder.value.payment.public_id)).data
+    const index = orders.value.findIndex(item => item.public_id === selectedOrder.value?.public_id)
+    if (index >= 0 && selectedOrder.value) orders.value[index] = selectedOrder.value
+  } catch (err: any) { error.value = apiError(err, 'We could not update the payment.') }
+  finally { markingPayment.value = false }
+}
+
 onMounted(load)
 </script>
 
@@ -80,6 +92,7 @@ onMounted(load)
       <aside v-if="selectedOrder" class="order-detail-card">
         <div class="order-detail-head"><div><span class="page-eyebrow">Order</span><h2>#{{ selectedOrder.order_number }}</h2><p>{{ date(selectedOrder.created_at) }}</p></div><button type="button" class="commerce-close" aria-label="Close order" @click="selectedOrder = null">×</button></div>
         <div class="order-customer"><strong>{{ selectedOrder.customer_first_name }} {{ selectedOrder.customer_last_name }}</strong><span>{{ selectedOrder.customer_phone }}</span><span v-if="selectedOrder.customer_email">{{ selectedOrder.customer_email }}</span></div>
+        <div v-if="selectedOrder.payment" class="order-payment-panel"><div><span>Payment</span><strong>{{ selectedOrder.payment.method.name }}</strong></div><div><span>Status</span><strong>{{ selectedOrder.payment.status }}</strong></div><button v-if="selectedOrder.payment.method.code === 'cash' && selectedOrder.payment.status === 'pending'" type="button" class="button button-secondary button-block" :disabled="markingPayment" @click="markPaymentPaid">{{ markingPayment ? 'Saving…' : 'Mark cash as paid' }}</button></div>
         <div class="order-items"><div v-for="item in selectedOrder.items" :key="item.public_id" class="order-item-row"><div><strong>{{ item.product_name }}</strong><small v-if="item.variant_label">{{ item.variant_label }}</small><small>{{ item.quantity }} × {{ money(item.unit_price_minor, selectedOrder.currency) }}</small></div><strong>{{ money(item.line_total_minor, selectedOrder.currency) }}</strong></div></div>
         <div v-if="selectedOrder.notes" class="order-note"><span>Customer note</span><p>{{ selectedOrder.notes }}</p></div>
         <div class="order-total"><span>Total</span><strong>{{ money(selectedOrder.total_minor, selectedOrder.currency) }}</strong></div>
