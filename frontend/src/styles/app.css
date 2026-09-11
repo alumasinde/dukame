@@ -15,6 +15,7 @@
 @import './modules/products.css';
 @import './modules/account.css';
 @import './modules/storefront.css';
+@import './modules/storefront-availability.css';
 @import './modules/commerce.css';
 @import './modules/order-tracking.css';
 @import './responsive.css';
