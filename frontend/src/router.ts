@@ -20,6 +20,7 @@ const router = createRouter({
         { path: 'billing', name: 'billing', component: () => import('./views/BillingView.vue') },
         { path: 'team', name: 'team', component: () => import('./views/TeamView.vue') },
         { path: 'settings', name: 'settings', component: () => import('./views/SettingsView.vue') },
+        { path: 'catalogue', redirect: { name: 'catalogue-products' } },
         { path: 'catalogue/products', name: 'catalogue-products', component: () => import('./views/CatalogueProductsView.vue') },
         { path: 'catalogue/products/new', name: 'catalogue-product-new', component: () => import('./views/CatalogueProductEditorView.vue') },
         { path: 'catalogue/products/:productId', name: 'catalogue-product-editor', component: () => import('./views/CatalogueProductEditorView.vue') },
@@ -46,25 +47,16 @@ router.beforeEach(async (to) => {
 
 window.addEventListener('storage', (event) => {
   if (event.key === 'dukame_access_token' && !event.newValue) {
-    const auth = useAuthStore()
-    auth.logoutLocal()
-    if (router.currentRoute.value.name !== 'login') router.replace({ name: 'login' })
+    const auth = useAuthStore(); auth.logoutLocal(); if (router.currentRoute.value.name !== 'login') router.replace({ name: 'login' })
   }
 })
-
 window.addEventListener('dukame:session-expired', () => {
-  const auth = useAuthStore()
-  auth.logoutLocal()
-  if (router.currentRoute.value.name !== 'login') router.replace({ name: 'login' })
+  const auth = useAuthStore(); auth.logoutLocal(); if (router.currentRoute.value.name !== 'login') router.replace({ name: 'login' })
 })
-
 setInterval(async () => {
   const auth = useAuthStore()
   if (auth.isAuthenticated && auth.initialized) {
-    try { await auth.validateSession() } catch {
-      auth.logoutLocal()
-      if (router.currentRoute.value.name !== 'login') router.replace({ name: 'login' })
-    }
+    try { await auth.validateSession() } catch { auth.logoutLocal(); if (router.currentRoute.value.name !== 'login') router.replace({ name: 'login' }) }
   }
 }, 5 * 60 * 1000)
 
