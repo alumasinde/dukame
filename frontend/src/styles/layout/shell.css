@@ -3,6 +3,10 @@
   background: var(--page-background);
 }
 
+.app-layout.sidebar-collapsed {
+  --sidebar-width: 76px;
+}
+
 .main-content {
   min-width: 0;
   min-height: 100vh;
@@ -10,6 +14,7 @@
   margin-left: var(--sidebar-width);
   display: flex;
   flex-direction: column;
+  transition: margin-left .2s ease;
 }
 
 .page-content {
@@ -57,4 +62,18 @@
   text-transform: uppercase;
   color: #748681;
   font-weight: 800;
+}
+
+@media (max-width: 800px) {
+  .app-layout.sidebar-collapsed {
+    --sidebar-width: 0px;
+  }
+
+  .main-content {
+    margin-left: 0;
+  }
+
+  .page-content {
+    padding: 22px 18px 42px;
+  }
 }
