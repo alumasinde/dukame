@@ -3,12 +3,13 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import { addCartItem } from '../lib/cart'
 import { useCartState } from '../lib/cart-state'
-import { getStorefrontProduct, type StorefrontProduct } from '../lib/storefront'
+import { getStorefront, getStorefrontProduct, type StorefrontProduct } from '../lib/storefront'
 
 const route = useRoute()
 const cartState = useCartState()
 const storeSlug = String(route.params.storeSlug)
 const product = ref<StorefrontProduct | null>(null)
+const storeName = ref('')
 const loading = ref(true)
 const adding = ref(false)
 const added = ref(false)
@@ -41,7 +42,7 @@ async function addToCart() {
   finally { adding.value = false }
 }
 
-onMounted(async () => { try { const [response] = await Promise.all([getStorefrontProduct(storeSlug, String(route.params.productSlug)), cartState.load(storeSlug)]); product.value = response.data; document.title = response.data.name; for (const group of optionGroups.value) selectedOptions[group.public_id] = group.values[0]?.public_id || '' } catch (err: any) { error.value = err?.response?.data?.detail || 'This product could not be found.' } finally { loading.value = false } })
+onMounted(async () => { try { const [productResponse, storeResponse] = await Promise.all([getStorefrontProduct(storeSlug, String(route.params.productSlug)), getStorefront(storeSlug), cartState.load(storeSlug)]); product.value = productResponse.data; storeName.value = storeResponse.data.name; document.title = `${product.value.name} · ${storeName.value}`; for (const group of optionGroups.value) selectedOptions[group.public_id] = group.values[0]?.public_id || '' } catch (err: any) { error.value = err?.response?.data?.detail || 'This product could not be found.' } finally { loading.value = false } })
 </script>
 
 <template>
@@ -49,7 +50,7 @@ onMounted(async () => { try { const [response] = await Promise.all([getStorefron
     <div v-if="loading" class="storefront-state"><div class="status-spinner" /><p>Loading product…</p></div>
     <div v-else-if="error && !product" class="storefront-state"><div class="storefront-empty-icon">!</div><h1>Product unavailable</h1><p>{{ error }}</p><RouterLink :to="`/${storeSlug}`" class="button button-primary">Back to store</RouterLink></div>
     <template v-else-if="product">
-      <header class="storefront-header"><RouterLink :to="`/${storeSlug}`" class="storefront-brand storefront-brand-link"><span class="storefront-mark">{{ product.name.charAt(0).toUpperCase() }}</span><div><strong>{{ product.name }}</strong><small>Powered by DukaMe</small></div></RouterLink><RouterLink :to="`/${storeSlug}/cart`" class="storefront-cart storefront-cart-link"><span class="storefront-cart-label">Cart</span><span v-if="cartState.itemCount.value">{{ cartState.itemCount.value }}</span></RouterLink></header>
+      <header class="storefront-header"><RouterLink :to="`/${storeSlug}`" class="storefront-brand storefront-brand-link"><span class="storefront-mark">{{ storeName ? storeName.charAt(0).toUpperCase() : 'S' }}</span><div><strong>{{ storeName || 'Your store' }}</strong><small>Powered by DukaMe</small></div></RouterLink><RouterLink :to="`/${storeSlug}/cart`" class="storefront-cart storefront-cart-link"><span class="storefront-cart-label">Cart</span><span v-if="cartState.itemCount.value">{{ cartState.itemCount.value }}</span></RouterLink></header>
       <section class="storefront-product-page">
         <RouterLink :to="`/${storeSlug}`" class="storefront-back">← Back to store</RouterLink>
         <div class="storefront-product-detail">
