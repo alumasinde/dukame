@@ -9,9 +9,9 @@ WORKDIR /app
 RUN groupadd -r app && useradd -r -g app app
 
 COPY pyproject.toml ./
+COPY app ./app
 RUN pip install --upgrade pip && pip install .
 
-COPY app ./app
 COPY migrations ./migrations
 COPY alembic.ini ./alembic.ini
 
