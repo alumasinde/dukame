@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from app.modules.commerce.models.order_notification import OrderNotification
     from app.modules.commerce.models.order_status import OrderStatus
     from app.modules.commerce.models.order_status_history import OrderStatusHistory
+    from app.modules.commerce.models.payment import Payment
 
 
 class Order(Base):
@@ -46,6 +47,7 @@ class Order(Base):
         back_populates="order",
         cascade="all, delete-orphan",
     )
+    payment: Mapped["Payment | None"] = relationship(back_populates="order", uselist=False, cascade="all, delete-orphan")
 
     __table_args__ = (
         Index("ix_orders_store_status_created", "store_id", "status_id", "created_at"),
