@@ -7,6 +7,7 @@ from app.modules.catalogue.routes import categories_router, media_router, option
 from app.modules.onboarding.routes.onboarding import router as onboarding_router
 from app.modules.rbac.routes.members import router as members_router
 from app.modules.rbac.routes.roles import router as roles_router
+from app.modules.storefront.routes import router as storefront_router
 from app.modules.subscriptions.routes.subscriptions import router as subscriptions_router
 from app.modules.tenancy.routes.tenants import router as tenants_router
 
@@ -18,6 +19,7 @@ api_router.include_router(tenants_router)
 api_router.include_router(subscriptions_router)
 api_router.include_router(roles_router)
 api_router.include_router(members_router)
+api_router.include_router(storefront_router)
 api_router.include_router(store_router)
 api_router.include_router(categories_router)
 api_router.include_router(products_router)
