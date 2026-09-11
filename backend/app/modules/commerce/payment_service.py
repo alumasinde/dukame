@@ -4,6 +4,7 @@ import hashlib
 import json
 import secrets
 from datetime import UTC, datetime
+from decimal import Decimal, InvalidOperation
 
 from fastapi import HTTPException
 from sqlalchemy import select
@@ -15,16 +16,24 @@ from app.modules.auth.models.identity import User
 from app.modules.catalogue.models.store import Store
 from app.modules.catalogue.services.context import resolve_store
 from app.modules.commerce.models.order import Order
+from app.modules.commerce.models.order_status import OrderStatus
+from app.modules.commerce.models.order_status_history import OrderStatusHistory
+from app.modules.commerce.models.order_status_transition import OrderStatusTransition
 from app.modules.commerce.models.payment import Payment
 from app.modules.commerce.models.payment_attempt import PaymentAttempt
 from app.modules.commerce.models.payment_event import PaymentEvent
 from app.modules.commerce.models.payment_method import PaymentMethod
 from app.modules.commerce.mpesa import MpesaClient, MpesaProviderError
+from app.modules.commerce.notifications import queue_order_sms
 from app.modules.commerce.payment_security import callback_token_hash, decrypt_config, encrypt_config, new_callback_token
 
 
 def payment_response(payment: Payment) -> dict[str, object]:
     return {"public_id": payment.public_id, "status": payment.status, "amount_minor": payment.amount_minor, "currency": payment.currency, "method": {"public_id": payment.payment_method.public_id, "code": payment.payment_method.code, "name": payment.payment_method.name}, "failure_reason": payment.failure_reason, "paid_at": payment.paid_at.isoformat() if payment.paid_at else None, "provider_reference": payment.provider_reference}
+
+
+def payment_list_response(payment: Payment) -> dict[str, object]:
+    return {**payment_response(payment), "order_public_id": payment.order.public_id, "order_number": payment.order.order_number, "customer_first_name": payment.order.customer_first_name, "customer_last_name": payment.order.customer_last_name, "customer_phone": payment.order.customer_phone, "attempt_count": len(payment.attempts), "created_at": payment.created_at.isoformat()}
 
 
 class PaymentService:
@@ -33,6 +42,10 @@ class PaymentService:
 
     async def list_public_methods(self, store: Store) -> list[PaymentMethod]:
         return list((await self.db.scalars(select(PaymentMethod).where(PaymentMethod.store_id == store.id, PaymentMethod.is_enabled.is_(True)).order_by(PaymentMethod.sort_order, PaymentMethod.id))).all())
+
+    async def list_methods(self, user: User, tenant_public_id: str) -> list[PaymentMethod]:
+        store = await resolve_store(self.db, user, tenant_public_id, "payments.read")
+        return list((await self.db.scalars(select(PaymentMethod).where(PaymentMethod.store_id == store.id).order_by(PaymentMethod.sort_order, PaymentMethod.id))).all())
 
     async def prepare_order_payment(self, store: Store, order: Order, method_public_id: str | None) -> Payment:
         method = await self._select_method(store.id, method_public_id)
@@ -55,12 +68,13 @@ class PaymentService:
         callback_token = config.get("callback_token")
         if not callback_token or not payment.payment_method.callback_token_hash:
             raise HTTPException(status_code=503, detail="M-Pesa callback is not configured")
-        callback_url = f"{settings.public_api_base_url.rstrip('/')}/api/v1/payments/mpesa/callback/{callback_token}"
+        callback_url = self._callback_url(callback_token)
         client = MpesaClient(config, callback_url)
         attempt_number = (await self.db.scalar(select(PaymentAttempt.attempt_number).where(PaymentAttempt.payment_id == payment.id).order_by(PaymentAttempt.attempt_number.desc()).limit(1)) or 0) + 1
         attempt = PaymentAttempt(public_id=secrets.token_hex(16), payment_id=payment.id, attempt_number=attempt_number, status="processing", phone=payment.customer_phone, amount_minor=payment.amount_minor)
         self.db.add(attempt)
         payment.status = "processing"
+        payment.failure_reason = None
         await self.db.commit()
         try:
             result = await client.stk_push(payment.amount_minor, payment.customer_phone, f"Order {payment.order_id}")
@@ -69,11 +83,12 @@ class PaymentService:
             if payment is None:
                 raise HTTPException(status_code=500, detail="Payment state could not be recovered") from exc
             attempt = await self.db.scalar(select(PaymentAttempt).where(PaymentAttempt.payment_id == payment.id, PaymentAttempt.attempt_number == attempt_number))
+            message = str(exc.detail if isinstance(exc, HTTPException) else exc)[:1000]
             if attempt:
                 attempt.status = "failed"
-                attempt.provider_response_message = str(exc.detail if isinstance(exc, HTTPException) else exc)[:1000]
+                attempt.provider_response_message = message
             payment.status = "failed"
-            payment.failure_reason = str(exc.detail if isinstance(exc, HTTPException) else exc)[:1000]
+            payment.failure_reason = message
             await self.db.commit()
             raise
         attempt = await self.db.scalar(select(PaymentAttempt).where(PaymentAttempt.payment_id == payment.id, PaymentAttempt.attempt_number == attempt_number))
@@ -88,6 +103,17 @@ class PaymentService:
         await self.db.commit()
         return await self._load_payment(payment.public_id)
 
+    async def retry(self, user: User, tenant_public_id: str, payment_public_id: str) -> Payment:
+        store = await resolve_store(self.db, user, tenant_public_id, "payments.manage")
+        payment = await self._load_payment(payment_public_id)
+        if payment is None or payment.store_id != store.id:
+            raise HTTPException(status_code=404, detail="Payment not found")
+        if payment.payment_method.code != "mpesa":
+            raise HTTPException(status_code=422, detail="Only M-Pesa payments can be retried")
+        if payment.status != "failed":
+            raise HTTPException(status_code=409, detail="Only failed payments can be retried")
+        return await self.initiate(payment.public_id)
+
     async def create_method(self, user: User, tenant_public_id: str, code: str, name: str, instructions: str | None, enabled: bool, config: dict[str, str] | None) -> tuple[PaymentMethod, str | None, str | None]:
         store = await resolve_store(self.db, user, tenant_public_id, "payments.manage")
         normalized_code = code.strip().lower()
@@ -100,16 +126,42 @@ class PaymentService:
         encrypted = None
         callback_hash = None
         if normalized_code == "mpesa":
-            if not config:
-                raise HTTPException(status_code=422, detail="M-Pesa configuration is required")
+            self._validate_mpesa_config(config)
             callback_token, callback_hash = new_callback_token()
-            stored_config = {**config, "callback_token": callback_token}
-            encrypted = encrypt_config(stored_config)
-            callback_url = f"{settings.public_api_base_url.rstrip('/')}/api/v1/payments/mpesa/callback/{callback_token}"
+            encrypted = encrypt_config({**config, "callback_token": callback_token})
+            callback_url = self._callback_url(callback_token)
         method = PaymentMethod(public_id=secrets.token_hex(16), store_id=store.id, code=normalized_code, name=name.strip(), is_enabled=enabled, sort_order=20, instructions=instructions.strip() if instructions else None, config_encrypted=encrypted, callback_token_hash=callback_hash)
         self.db.add(method)
         await self.db.commit()
         return method, callback_token, callback_url
+
+    async def update_method(self, user: User, tenant_public_id: str, method_public_id: str, name: str | None, instructions: str | None, enabled: bool | None, config: dict[str, str] | None) -> tuple[PaymentMethod, str | None]:
+        store = await resolve_store(self.db, user, tenant_public_id, "payments.manage")
+        method = await self.db.scalar(select(PaymentMethod).where(PaymentMethod.store_id == store.id, PaymentMethod.public_id == method_public_id))
+        if method is None:
+            raise HTTPException(status_code=404, detail="Payment method not found")
+        if name is not None:
+            method.name = name.strip()
+        if instructions is not None:
+            method.instructions = instructions.strip() or None
+        if enabled is not None:
+            method.is_enabled = enabled
+        callback_url = None
+        if method.code == "mpesa":
+            current = decrypt_config(method.config_encrypted)
+            if config is not None:
+                current = {**current, **config}
+                self._validate_mpesa_config(current)
+                method.config_encrypted = encrypt_config(current)
+            callback_token = current.get("callback_token")
+            if not callback_token:
+                callback_token, callback_hash = new_callback_token()
+                current["callback_token"] = callback_token
+                method.callback_token_hash = callback_hash
+                method.config_encrypted = encrypt_config(current)
+            callback_url = self._callback_url(callback_token)
+        await self.db.commit()
+        return method, callback_url
 
     async def set_cash_paid(self, user: User, tenant_public_id: str, payment_public_id: str) -> Payment:
         store = await resolve_store(self.db, user, tenant_public_id, "payments.manage")
@@ -125,6 +177,7 @@ class PaymentService:
         payment.status = "paid"
         payment.paid_at = datetime.now(UTC)
         payment.failure_reason = None
+        await self._confirm_order_after_payment(payment)
         await self.db.commit()
         return await self._load_payment(payment.public_id)
 
@@ -147,10 +200,10 @@ class PaymentService:
         self.db.add(PaymentEvent(public_id=secrets.token_hex(16), payment_id=attempt.payment.id, event_key=event_key, event_type="mpesa.stk.callback", payload_hash=payload_hash, processed_at=datetime.now(UTC)))
         if result_code == "0":
             metadata = {str(item.get("Name")): item.get("Value") for item in callback.get("CallbackMetadata", {}).get("Item", []) if item.get("Name")}
-            amount = metadata.get("Amount")
+            amount = self._amount_from_provider(metadata.get("Amount"))
             receipt = str(metadata.get("MpesaReceiptNumber") or "")
             phone = str(metadata.get("PhoneNumber") or "")
-            if not receipt or amount is None or round(float(amount) * 100) != attempt.payment.amount_minor:
+            if not receipt or amount != attempt.payment.amount_minor:
                 attempt.status = "failed"
                 attempt.provider_response_code = result_code
                 attempt.provider_response_message = "Payment callback amount or receipt could not be verified"
@@ -167,6 +220,7 @@ class PaymentService:
                 attempt.payment.failure_reason = None
                 if phone:
                     attempt.payment.customer_phone = phone
+                await self._confirm_order_after_payment(attempt.payment)
         else:
             attempt.status = "failed"
             attempt.provider_response_code = result_code
@@ -176,8 +230,61 @@ class PaymentService:
             attempt.payment.failure_reason = attempt.provider_response_message
         await self.db.commit()
 
+    async def list_payments(self, user: User, tenant_public_id: str, offset: int, limit: int, status: str | None) -> list[Payment]:
+        store = await resolve_store(self.db, user, tenant_public_id, "payments.read")
+        stmt = select(Payment).options(selectinload(Payment.payment_method), selectinload(Payment.attempts), selectinload(Payment.order)).where(Payment.store_id == store.id).order_by(Payment.created_at.desc(), Payment.id.desc()).offset(offset).limit(limit)
+        if status:
+            stmt = stmt.where(Payment.status == status.strip().lower())
+        return list((await self.db.scalars(stmt)).all())
+
+    async def get_payment(self, user: User, tenant_public_id: str, payment_public_id: str) -> Payment:
+        store = await resolve_store(self.db, user, tenant_public_id, "payments.read")
+        payment = await self._load_payment(payment_public_id)
+        if payment is None or payment.store_id != store.id:
+            raise HTTPException(status_code=404, detail="Payment not found")
+        return payment
+
     async def get_order_payment(self, store: Store, order_public_id: str) -> Payment | None:
         return await self.db.scalar(select(Payment).join(Order, Payment.order_id == Order.id).options(selectinload(Payment.payment_method)).where(Payment.store_id == store.id, Order.public_id == order_public_id))
+
+    async def _confirm_order_after_payment(self, payment: Payment) -> None:
+        order = await self.db.scalar(select(Order).options(selectinload(Order.status)).where(Order.id == payment.order_id).with_for_update())
+        if order is None or order.status.is_terminal or order.status.code != "pending":
+            return
+        confirmed = await self.db.scalar(select(OrderStatus).where(OrderStatus.code == "confirmed", OrderStatus.is_active.is_(True)))
+        if confirmed is None:
+            return
+        transition = await self.db.scalar(select(OrderStatusTransition).where(OrderStatusTransition.from_status_id == order.status_id, OrderStatusTransition.to_status_id == confirmed.id))
+        if transition is None:
+            return
+        order.status_id = confirmed.id
+        self.db.add(OrderStatusHistory(order_id=order.id, status_id=confirmed.id, source="payment"))
+
+    @staticmethod
+    def _amount_from_provider(value: object) -> int | None:
+        if value is None:
+            return None
+        try:
+            amount = Decimal(str(value))
+        except (InvalidOperation, ValueError):
+            return None
+        if amount < 0 or amount.as_tuple().exponent < -2:
+            return None
+        return int(amount * 100)
+
+    @staticmethod
+    def _validate_mpesa_config(config: dict[str, str] | None) -> None:
+        required = {"consumer_key", "consumer_secret", "shortcode", "passkey", "environment", "transaction_type"}
+        if not config or any(not str(config.get(key, "")).strip() for key in required):
+            raise HTTPException(status_code=422, detail="Complete M-Pesa configuration is required")
+        if config["environment"] not in {"sandbox", "production"}:
+            raise HTTPException(status_code=422, detail="Invalid M-Pesa environment")
+        if config["transaction_type"] not in {"CustomerPayBillOnline", "CustomerBuyGoodsOnline"}:
+            raise HTTPException(status_code=422, detail="Invalid M-Pesa transaction type")
+
+    @staticmethod
+    def _callback_url(callback_token: str) -> str:
+        return f"{settings.public_api_base_url.rstrip('/')}/api/v1/payments/mpesa/callback/{callback_token}"
 
     async def _select_method(self, store_id: int, public_id: str | None) -> PaymentMethod:
         if public_id:
@@ -189,4 +296,4 @@ class PaymentService:
         return method
 
     async def _load_payment(self, public_id: str) -> Payment | None:
-        return await self.db.scalar(select(Payment).options(selectinload(Payment.payment_method), selectinload(Payment.attempts)).where(Payment.public_id == public_id))
+        return await self.db.scalar(select(Payment).options(selectinload(Payment.payment_method), selectinload(Payment.attempts), selectinload(Payment.events), selectinload(Payment.order).selectinload(Order.status)).where(Payment.public_id == public_id))
