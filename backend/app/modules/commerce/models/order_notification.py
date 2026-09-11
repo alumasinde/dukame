@@ -30,7 +30,7 @@ class OrderNotification(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
 
-    order: Mapped["Order"] = relationship()
+    order: Mapped["Order"] = relationship(back_populates="notifications")
     order_status: Mapped["OrderStatus"] = relationship()
 
     __table_args__ = (
