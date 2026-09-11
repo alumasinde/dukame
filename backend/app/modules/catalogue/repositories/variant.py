@@ -27,11 +27,7 @@ class VariantRepository:
         )
 
     async def get_by_sku(self, store_id: int, sku: str) -> ProductVariant | None:
-        return await self.db.scalar(
-            select(ProductVariant)
-            .join(ProductVariant.product)
-            .where(ProductVariant.sku == sku, ProductVariant.product.has(store_id=store_id))
-        )
+        return await self.db.scalar(select(ProductVariant).where(ProductVariant.store_id == store_id, ProductVariant.sku == sku))
 
     async def create(self, **values) -> ProductVariant:
         variant = ProductVariant(**values)
