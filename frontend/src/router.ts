@@ -21,6 +21,8 @@ const router = createRouter({
         { path: 'team', name: 'team', component: () => import('./views/TeamView.vue') },
         { path: 'settings', name: 'settings', component: () => import('./views/SettingsView.vue') },
         { path: 'catalogue/products', name: 'catalogue-products', component: () => import('./views/CatalogueProductsView.vue') },
+        { path: 'catalogue/products/new', name: 'catalogue-product-new', component: () => import('./views/CatalogueProductEditorView.vue') },
+        { path: 'catalogue/products/:productId', name: 'catalogue-product-editor', component: () => import('./views/CatalogueProductEditorView.vue') },
         { path: 'catalogue/categories', name: 'catalogue-categories', component: () => import('./views/CatalogueCategoriesView.vue') },
         { path: 'catalogue/options', name: 'catalogue-options', component: () => import('./views/CatalogueOptionsView.vue') },
         { path: 'orders', name: 'orders', component: phase3View, props: { title: 'Orders', description: 'Orders will become the central workflow for receiving, processing and completing customer purchases.' } },
