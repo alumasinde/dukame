@@ -9,7 +9,7 @@ WORKDIR /app
 RUN groupadd -r app && useradd -r -g app app
 
 COPY pyproject.toml ./
-RUN pip install --upgrade pip && pip install .
+RUN pip install --upgrade pip && pip install .[dev]
 
 COPY app ./app
 COPY migrations ./migrations
