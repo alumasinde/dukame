@@ -73,6 +73,7 @@ class OrderResponse(BaseModel):
     public_id: str
     order_number: str
     status: OrderStatusResponse
+    store_name: str | None = None
     customer_first_name: str
     customer_last_name: str
     customer_email: str | None
