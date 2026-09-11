@@ -2,15 +2,16 @@
 import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import { getCart } from '../lib/cart'
+import { useCartState } from '../lib/cart-state'
 import { getStorefront, type Storefront, type StorefrontCategory, type StorefrontProduct } from '../lib/storefront'
 
 const route = useRoute()
+const cartState = useCartState()
 const store = ref<Storefront | null>(null)
 const loading = ref(true)
 const error = ref('')
 const selectedCategory = ref('')
 const searchQuery = ref('')
-const cartCount = ref(0)
 
 const categoryMap = computed(() => new Map((store.value?.categories || []).map(category => [category.public_id, category])))
 const topLevelCategories = computed(() => (store.value?.categories || []).filter(category => !category.parent_public_id))
@@ -69,11 +70,11 @@ function selectCategory(id: string) {
 }
 
 onMounted(async () => {
+  const slug = String(route.params.storeSlug)
   try {
-    const slug = String(route.params.storeSlug)
     const [storeResponse, cartResponse] = await Promise.all([getStorefront(slug), getCart(slug)])
     store.value = storeResponse.data
-    cartCount.value = cartResponse.data.item_count
+    cartState.set(slug, cartResponse.data)
     document.title = storeResponse.data.name
   } catch (err: any) {
     error.value = err?.response?.data?.detail || 'This store could not be found.'
@@ -90,7 +91,7 @@ onMounted(async () => {
     <template v-else-if="store">
       <header class="storefront-header">
         <RouterLink :to="`/${store.slug}`" class="storefront-brand storefront-brand-link"><span class="storefront-mark">{{ store.name.charAt(0).toUpperCase() }}</span><div><strong>{{ store.name }}</strong><small>Powered by DukaMe</small></div></RouterLink>
-        <RouterLink :to="`/${store.slug}/cart`" class="storefront-cart storefront-cart-link">Cart <span>{{ cartCount }}</span></RouterLink>
+        <RouterLink :to="`/${store.slug}/cart`" class="storefront-cart storefront-cart-link"><span class="storefront-cart-label">Cart</span><span>{{ cartState.itemCount.value }}</span></RouterLink>
       </header>
 
       <section class="storefront-hero"><div class="storefront-hero-inner"><span class="storefront-eyebrow">Welcome to our store</span><h1>{{ store.name }}</h1><p>{{ store.description || 'Browse our latest products and find something you will love.' }}</p></div></section>
