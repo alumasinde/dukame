@@ -22,7 +22,7 @@ class Order(Base):
     store_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("stores.id", ondelete="CASCADE"), nullable=False)
     status_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("order_statuses.id", ondelete="RESTRICT"), nullable=False)
     order_number: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
-    tracking_token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    tracking_token_hash: Mapped[str | None] = mapped_column(String(64), unique=True)
     customer_first_name: Mapped[str] = mapped_column(String(100), nullable=False)
     customer_last_name: Mapped[str] = mapped_column(String(100), nullable=False)
     customer_email: Mapped[str | None] = mapped_column(String(320))
