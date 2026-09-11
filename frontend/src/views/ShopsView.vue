@@ -12,9 +12,14 @@ const saving = ref(false)
 const switching = ref('')
 const error = ref('')
 const shops = computed(() => auth.tenants)
+const storefrontBase = window.location.origin
 
 function suggestSlug() {
   slug.value = name.value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 100)
+}
+
+function storeUrl(shop: Tenant) {
+  return `${storefrontBase}/${shop.slug}`
 }
 
 async function createBusiness() {
@@ -74,11 +79,14 @@ async function selectBusiness(shop: Tenant) {
         <div class="panel-heading"><div><h3>Your businesses</h3><p>Choose the business you want to manage.</p></div></div>
         <div v-if="!shops.length" class="mini-empty">No businesses yet.</div>
         <div v-else class="shop-list">
-          <button v-for="shop in shops" :key="shop.public_id" class="shop-row" :class="{ selected: shop.public_id === auth.activeTenantId }" :disabled="switching === shop.public_id" @click="selectBusiness(shop)">
-            <span class="shop-logo">{{ shop.name.charAt(0).toUpperCase() }}</span>
-            <span><strong>{{ shop.name }}</strong><small>{{ shop.slug }} · {{ shop.role }}</small></span>
-            <span class="row-arrow" aria-hidden="true">{{ switching === shop.public_id ? '…' : shop.public_id === auth.activeTenantId ? '✓' : '→' }}</span>
-          </button>
+          <article v-for="shop in shops" :key="shop.public_id" class="shop-card" :class="{ selected: shop.public_id === auth.activeTenantId }">
+            <button class="shop-row" :disabled="switching === shop.public_id" @click="selectBusiness(shop)">
+              <span class="shop-logo">{{ shop.name.charAt(0).toUpperCase() }}</span>
+              <span><strong>{{ shop.name }}</strong><small>{{ shop.slug }} · {{ shop.role }}</small></span>
+              <span class="row-arrow" aria-hidden="true">{{ switching === shop.public_id ? '…' : shop.public_id === auth.activeTenantId ? '✓' : '→' }}</span>
+            </button>
+            <a class="storefront-link" :href="storeUrl(shop)" target="_blank" rel="noopener">View store <span>↗</span></a>
+          </article>
         </div>
       </section>
     </div>
