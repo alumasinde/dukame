@@ -3,12 +3,14 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import { checkoutCart, removeCartItem, updateCartItem, type Cart, type Order } from '../lib/cart'
 import { useCartState } from '../lib/cart-state'
+import { getStorefront } from '../lib/storefront'
 
 const route = useRoute()
 const storeSlug = String(route.params.storeSlug)
 const cartState = useCartState()
 const cart = ref<Cart | null>(cartState.cart.value)
 const order = ref<Order | null>(null)
+const storeName = ref('')
 const loading = ref(!cart.value)
 const submitting = ref(false)
 const busyItems = ref<Record<string, boolean>>({})
@@ -24,14 +26,24 @@ function recalculate(next: Cart): Cart { next.item_count = next.items.reduce((su
 async function reconcileCart() { try { cart.value = await cartState.load(storeSlug, true) } catch (err: any) { if (!cart.value) error.value = apiError(err, 'We could not load your cart.') } finally { loading.value = false } }
 async function changeQuantity(itemId: string, quantity: number) { const current = cart.value; const item = current?.items.find(entry => entry.public_id === itemId); if (!current || !item || quantity < 1 || busyItems.value[itemId]) return; const previous = current; const optimistic = recalculate({ ...current, items: current.items.map(entry => entry.public_id === itemId ? { ...entry, quantity, line_total_minor: entry.unit_price_minor * quantity } : entry) }); cart.value = optimistic; cartState.update(storeSlug, optimistic); setBusy(itemId, true); error.value = ''; try { const response = await updateCartItem(storeSlug, itemId, quantity); cart.value = response.data; cartState.update(storeSlug, response.data) } catch (err: any) { cart.value = previous; cartState.update(storeSlug, previous); error.value = apiError(err, 'We could not update that item.') } finally { setBusy(itemId, false) } }
 async function remove(itemId: string) { const current = cart.value; if (!current || busyItems.value[itemId]) return; const previous = current; const optimistic = recalculate({ ...current, items: current.items.filter(item => item.public_id !== itemId) }); cart.value = optimistic; cartState.update(storeSlug, optimistic); setBusy(itemId, true); error.value = ''; try { const response = await removeCartItem(storeSlug, itemId); cart.value = response.data; cartState.update(storeSlug, response.data) } catch (err: any) { cart.value = previous; cartState.update(storeSlug, previous); error.value = apiError(err, 'We could not remove that item.') } finally { setBusy(itemId, false) } }
-async function submitOrder() { if (!cart.value?.items.length || submitting.value) return; fieldError.value = ''; error.value = ''; if (!form.first_name.trim() || !form.last_name.trim() || !form.phone.trim()) { fieldError.value = 'Enter your first name, last name and phone number to continue.'; return } submitting.value = true; try { order.value = (await checkoutCart(storeSlug, { first_name: form.first_name.trim(), last_name: form.last_name.trim(), phone: form.phone.trim(), email: form.email.trim() || undefined, notes: form.notes.trim() || undefined })).data; cart.value = null; cartState.clear(storeSlug) } catch (err: any) { error.value = apiError(err, 'We could not place your order. Please try again.'); await reconcileCart() } finally { submitting.value = false } }
-onMounted(() => reconcileCart())
+async function submitOrder() { if (!cart.value?.items.length || submitting.value) return; fieldError.value = ''; error.value = ''; if (!form.first_name.trim() || !form.last_name.trim() || !form.phone.trim()) { fieldError.value = 'Enter your first name, last name and phone number to continue.'; return } submitting.value = true; try { order.value = (await checkoutCart(storeSlug, { first_name: form.first_name.trim(), last_name: form.last_name.trim(), phone: form.phone.trim(), email: form.email.trim() || undefined, notes: form.notes.trim() || undefined })).data; storeName.value = order.value.store_name || storeName.value; cart.value = null; cartState.clear(storeSlug) } catch (err: any) { error.value = apiError(err, 'We could not place your order. Please try again.'); await reconcileCart() } finally { submitting.value = false } }
+onMounted(async () => {
+  try {
+    const [storeResponse] = await Promise.all([getStorefront(storeSlug), reconcileCart()])
+    storeName.value = storeResponse.data.name
+    document.title = `Cart · ${storeName.value}`
+  } catch (err: any) {
+    if (!storeName.value) storeName.value = ''
+    if (!cart.value) error.value = apiError(err, 'We could not load this store.')
+    loading.value = false
+  }
+})
 </script>
 
 <template>
   <main class="storefront-page">
     <header class="storefront-header">
-      <RouterLink :to="`/${storeSlug}`" class="storefront-brand storefront-brand-link"><span class="storefront-mark">D</span><div><strong>{{ order?.store_name || 'Store' }}</strong><small>Powered by DukaMe</small></div></RouterLink>
+      <RouterLink :to="`/${storeSlug}`" class="storefront-brand storefront-brand-link"><span class="storefront-mark">{{ storeName ? storeName.charAt(0).toUpperCase() : 'S' }}</span><div><strong>{{ storeName || 'Store' }}</strong><small>Powered by DukaMe</small></div></RouterLink>
       <RouterLink :to="`/${storeSlug}`" class="storefront-cart storefront-cart-link">Continue shopping</RouterLink>
     </header>
     <section class="storefront-cart-page">
