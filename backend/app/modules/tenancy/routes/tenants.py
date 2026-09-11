@@ -1,9 +1,11 @@
 from fastapi import APIRouter, Depends
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.modules.auth.models.identity import User
 from app.modules.auth.security import get_current_user
+from app.modules.tenancy.models.business_type import BusinessType
 from app.modules.tenancy.schemas.tenant import CreateTenantRequest, TenantListResponse, TenantResponse
 from app.modules.tenancy.services.tenant import create_tenant, get_user_tenants
 
@@ -32,10 +34,13 @@ async def list_tenants(user: User = Depends(get_current_user), db: AsyncSession 
 @router.post("", response_model=TenantResponse, status_code=201)
 async def create_shop(payload: CreateTenantRequest, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> TenantResponse:
     business_type_id = None
+    business_type = None
     if payload.business_type_public_id:
-        from app.modules.tenancy.models.business_type import BusinessType
-        business_type = await db.scalar(BusinessType.__table__.select().where(BusinessType.public_id == payload.business_type_public_id, BusinessType.is_active.is_(True)))
-        business_type_id = business_type.id if business_type else None
+        business_type = await db.scalar(select(BusinessType).where(BusinessType.public_id == payload.business_type_public_id, BusinessType.is_active.is_(True)))
+        if business_type is None:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=422, detail="Select a valid business type")
+        business_type_id = business_type.id
     tenant, _ = await create_tenant(db, user, payload.name, payload.slug, business_type_id)
     return TenantResponse(
         public_id=tenant.public_id,
@@ -43,6 +48,6 @@ async def create_shop(payload: CreateTenantRequest, user: User = Depends(get_cur
         slug=tenant.slug,
         status=tenant.status,
         role="owner",
-        business_type_public_id=tenant.business_type.public_id if tenant.business_type else None,
-        business_type_name=tenant.business_type.name if tenant.business_type else None,
+        business_type_public_id=business_type.public_id if business_type else None,
+        business_type_name=business_type.name if business_type else None,
     )
