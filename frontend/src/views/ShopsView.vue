@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore, type Tenant } from '../stores/auth'
 import { api } from '../lib/api'
+import { getStorefrontDisplayBase, getStorefrontUrl } from '../lib/storefront-url'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -12,14 +13,14 @@ const saving = ref(false)
 const switching = ref('')
 const error = ref('')
 const shops = computed(() => auth.tenants)
-const storefrontBase = window.location.origin
+const storefrontDisplayBase = getStorefrontDisplayBase()
 
 function suggestSlug() {
   slug.value = name.value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 100)
 }
 
 function storeUrl(shop: Tenant) {
-  return `${storefrontBase}/${shop.slug}`
+  return getStorefrontUrl(shop.slug)
 }
 
 async function createBusiness() {
@@ -70,7 +71,7 @@ async function selectBusiness(shop: Tenant) {
         <div v-if="error" class="alert alert-danger">{{ error }}</div>
         <form class="form-stack" @submit.prevent="createBusiness">
           <label>Business name<input v-model="name" @blur="suggestSlug" placeholder="e.g. Best Collections" required /></label>
-          <label>Store link<div class="input-prefix"><span>dukame.shop/</span><input v-model="slug" placeholder="best-collections" pattern="[a-z0-9]+(?:-[a-z0-9]+)*" /></div></label>
+          <label>Store link<div class="input-prefix"><span>{{ storefrontDisplayBase }}</span><input v-model="slug" placeholder="best-collections" pattern="[a-z0-9]+(?:-[a-z0-9]+)*" /></div></label>
           <button class="button button-primary" :disabled="saving">{{ saving ? 'Creating…' : 'Create business' }}</button>
         </form>
       </section>
