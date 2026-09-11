@@ -18,6 +18,7 @@
 @import './modules/storefront-availability.css';
 @import './modules/storefront-quantity.css';
 @import './modules/storefront-payment.css';
+@import './modules/storefront-experience.css';
 @import './modules/commerce.css';
 @import './modules/order-payment.css';
 @import './modules/payments.css';
