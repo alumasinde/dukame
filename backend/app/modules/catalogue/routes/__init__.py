@@ -5,4 +5,11 @@ from app.modules.catalogue.routes.products import router as products_router
 from app.modules.catalogue.routes.store import router as store_router
 from app.modules.catalogue.routes.variants import router as variants_router
 
-__all__ = ["store_router", "categories_router", "products_router", "options_router", "variants_router", "media_router"]
+__all__ = [
+    "categories_router",
+    "media_router",
+    "options_router",
+    "products_router",
+    "store_router",
+    "variants_router",
+]
