@@ -1,10 +1,5 @@
-/* DukaMe styling entry point.
- * Keep application styling grouped by responsibility instead of by view.
- * The existing stylesheet is loaded first as a compatibility layer while
- * the shared system is extracted into these files incrementally.
- */
+/* DukaMe styling entry point. */
 @import '../styles.css';
-
 @import './foundation/variables.css';
 @import './foundation/reset.css';
 @import './layout/shell.css';
@@ -15,6 +10,7 @@
 @import './components/modals.css';
 @import './components/dropdowns.css';
 @import './components/badges.css';
+@import './modules/auth.css';
 @import './modules/catalogue.css';
 @import './modules/products.css';
 @import './modules/account.css';
