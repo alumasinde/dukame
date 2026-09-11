@@ -56,6 +56,16 @@ class PaymentResponse(BaseModel):
     provider_reference: str | None = None
 
 
+class PaymentListItemResponse(PaymentResponse):
+    order_public_id: str
+    order_number: str
+    customer_first_name: str
+    customer_last_name: str
+    customer_phone: str
+    attempt_count: int
+    created_at: str
+
+
 class CartItemResponse(BaseModel):
     public_id: str
     product_public_id: str
