@@ -57,12 +57,20 @@ def test_phase2_identity_tenancy_subscription_flow() -> None:
         assert onboarding_status.json()["current_step"] == "business_setup"
         assert onboarding_status.json()["total_steps"] == 1
 
+        business_types = client.get("/api/v1/business-types", headers=headers)
+        assert business_types.status_code == 200, business_types.text
+        business_type_items = business_types.json()["items"]
+        assert business_type_items
+        business_type_public_id = business_type_items[0]["public_id"]
+        assert business_type_public_id
+
         completed = client.post(
             "/api/v1/onboarding/shop",
             headers=headers,
             json={
                 "shop_name": "Phase 2 Shop",
                 "shop_slug": f"phase2shop{uuid.uuid4().hex[:8]}",
+                "business_type_public_id": business_type_public_id,
             },
         )
         assert completed.status_code == 201, completed.text
