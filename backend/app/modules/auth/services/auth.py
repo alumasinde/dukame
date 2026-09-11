@@ -8,7 +8,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.time import ensure_utc, utc_now
 from app.modules.auth.models.identity import AuthSession, User
 from app.modules.auth.security import hash_password, make_session, revoke_all_user_sessions, revoke_session, token_hash, verify_password
-from app.modules.tenancy.models.tenant import Tenant, TenantUser
 
 
 async def register_user(db: AsyncSession, email: str, password: str, first_name: str, last_name: str, phone: str | None) -> User:

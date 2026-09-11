@@ -7,12 +7,12 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from app.core.config import settings
 from app.models.base import Base
-from app.modules.auth.models.identity import AuthSession, User
-from app.modules.auth.models.tokens import PasswordResetToken, VerificationToken
-from app.modules.catalogue.models import Category, Product, ProductMedia, ProductOption, ProductOptionValue, ProductVariant, ProductVariantOptionValue, Store
-from app.modules.rbac.models.rbac import Permission, TenantRole, TenantRolePermission
-from app.modules.subscriptions.models.subscription import Plan, PlanFeature, Subscription, SubscriptionEvent
-from app.modules.tenancy.models.tenant import Tenant, TenantUser
+from app.modules.auth.models.identity import AuthSession, User  # noqa: F401
+from app.modules.auth.models.tokens import PasswordResetToken, VerificationToken  # noqa: F401
+from app.modules.catalogue.models import Category, Product, ProductMedia, ProductOption, ProductOptionValue, ProductVariant, ProductVariantOptionValue, Store  # noqa: F401
+from app.modules.rbac.models.rbac import Permission, TenantRole, TenantRolePermission  # noqa: F401
+from app.modules.subscriptions.models.subscription import Plan, PlanFeature, Subscription, SubscriptionEvent  # noqa: F401
+from app.modules.tenancy.models.tenant import Tenant, TenantUser  # noqa: F401
 
 config = context.config
 
