@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.modules.catalogue.models.product import ProductVariant
+from app.modules.catalogue.models.variant import ProductVariant
 from app.modules.catalogue.models.store import Store
 from app.modules.commerce.models.cart import Cart
 from app.modules.commerce.models.order import Order
