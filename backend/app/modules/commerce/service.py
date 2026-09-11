@@ -35,13 +35,7 @@ class CommerceService:
             if cart is not None and cart.checked_out_at is None and cart.expires_at > datetime.now(UTC):
                 return cart, token, False
         raw_token = secrets.token_urlsafe(32)
-        cart = Cart(
-            public_id=secrets.token_hex(16),
-            store_id=store.id,
-            session_token_hash=self._hash_token(raw_token),
-            currency=store.currency,
-            expires_at=datetime.now(UTC) + timedelta(seconds=settings.cart_session_ttl_seconds),
-        )
+        cart = Cart(public_id=secrets.token_hex(16), store_id=store.id, session_token_hash=self._hash_token(raw_token), currency=store.currency, expires_at=datetime.now(UTC) + timedelta(seconds=settings.cart_session_ttl_seconds))
         self.db.add(cart)
         await self.db.flush()
         return cart, raw_token, True
@@ -59,13 +53,7 @@ class CommerceService:
         product = await self._product_for_cart(store.id, payload.product_public_id)
         variant = await self._resolve_variant(store.id, product, payload.variant_public_id)
         unit_price = variant.price_minor if variant and variant.price_minor is not None else product.price_minor
-        existing = await self.db.scalar(
-            select(CartItem).where(
-                CartItem.cart_id == cart.id,
-                CartItem.product_id == product.id,
-                CartItem.variant_id == (variant.id if variant else None),
-            )
-        )
+        existing = await self.db.scalar(select(CartItem).where(CartItem.cart_id == cart.id, CartItem.product_id == product.id, CartItem.variant_id == (variant.id if variant else None)))
         new_quantity = (existing.quantity if existing else 0) + payload.quantity
         self._ensure_quantity(new_quantity)
         self._ensure_stock(product, variant, new_quantity)
@@ -73,27 +61,14 @@ class CommerceService:
             existing.quantity = new_quantity
             existing.unit_price_minor = unit_price
         else:
-            self.db.add(
-                CartItem(
-                    public_id=secrets.token_hex(16),
-                    cart_id=cart.id,
-                    product_id=product.id,
-                    variant_id=variant.id if variant else None,
-                    quantity=payload.quantity,
-                    unit_price_minor=unit_price,
-                )
-            )
+            self.db.add(CartItem(public_id=secrets.token_hex(16), cart_id=cart.id, product_id=product.id, variant_id=variant.id if variant else None, quantity=payload.quantity, unit_price_minor=unit_price))
         await self.db.commit()
         return await self._load_cart(cart.id)
 
     async def update_item(self, store: Store, token: str, item_public_id: str, payload: CartItemUpdate) -> Cart:
         self._ensure_quantity(payload.quantity)
         cart = await self._require_cart(store.id, token)
-        item = await self.db.scalar(
-            select(CartItem)
-            .options(selectinload(CartItem.product), selectinload(CartItem.variant))
-            .where(CartItem.cart_id == cart.id, CartItem.public_id == item_public_id)
-        )
+        item = await self.db.scalar(select(CartItem).options(selectinload(CartItem.product), selectinload(CartItem.variant)).where(CartItem.cart_id == cart.id, CartItem.public_id == item_public_id))
         if item is None:
             raise HTTPException(status_code=404, detail="Cart item not found")
         self._ensure_stock(item.product, item.variant, payload.quantity)
@@ -114,33 +89,12 @@ class CommerceService:
         cart = await self._cart_by_token(store.id, token, lock=True)
         if cart is None or cart.checked_out_at is not None or cart.expires_at <= datetime.now(UTC):
             raise HTTPException(status_code=409, detail="Your cart has expired. Please start a new cart.")
-        items = list(
-            (
-                await self.db.scalars(
-                    select(CartItem)
-                    .options(
-                        selectinload(CartItem.product).selectinload(Product.media),
-                        selectinload(CartItem.variant)
-                        .selectinload(ProductVariant.option_value_links)
-                        .selectinload(ProductVariantOptionValue.option_value)
-                        .selectinload(ProductOptionValue.option),
-                    )
-                    .where(CartItem.cart_id == cart.id)
-                    .with_for_update()
-                )
-            ).all()
-        )
+        items = list((await self.db.scalars(select(CartItem).options(selectinload(CartItem.product).selectinload(Product.media), selectinload(CartItem.variant).selectinload(ProductVariant.option_value_links).selectinload(ProductVariantOptionValue.option_value).selectinload(ProductOptionValue.option)).where(CartItem.cart_id == cart.id).with_for_update())).all())
         if not items:
             raise HTTPException(status_code=422, detail="Your cart is empty")
-        initial_status = await self.db.scalar(
-            select(OrderStatus)
-            .where(OrderStatus.is_initial.is_(True), OrderStatus.is_active.is_(True))
-            .order_by(OrderStatus.sort_order.asc(), OrderStatus.id.asc())
-            .limit(1)
-        )
+        initial_status = await self.db.scalar(select(OrderStatus).where(OrderStatus.is_initial.is_(True), OrderStatus.is_active.is_(True)).order_by(OrderStatus.sort_order.asc(), OrderStatus.id.asc()).limit(1))
         if initial_status is None:
             raise HTTPException(status_code=500, detail="No initial order status is configured")
-
         subtotal = 0
         snapshots: list[tuple[CartItem, Product, ProductVariant | None, int]] = []
         for item in items:
@@ -156,47 +110,16 @@ class CommerceService:
             unit_price = variant.price_minor if variant and variant.price_minor is not None else product.price_minor
             subtotal += unit_price * item.quantity
             snapshots.append((item, product, variant, unit_price))
-
-        order = Order(
-            public_id=secrets.token_hex(16),
-            store_id=store.id,
-            status_id=initial_status.id,
-            order_number=await self._order_number(),
-            customer_first_name=payload.first_name.strip(),
-            customer_last_name=payload.last_name.strip(),
-            customer_email=payload.email.strip() if payload.email else None,
-            customer_phone=payload.phone.strip(),
-            notes=payload.notes.strip() if payload.notes else None,
-            currency=store.currency,
-            subtotal_minor=subtotal,
-            total_minor=subtotal,
-        )
+        order = Order(public_id=secrets.token_hex(16), store_id=store.id, status_id=initial_status.id, order_number=await self._order_number(), customer_first_name=payload.first_name.strip(), customer_last_name=payload.last_name.strip(), customer_email=payload.email.strip() if payload.email else None, customer_phone=payload.phone.strip(), notes=payload.notes.strip() if payload.notes else None, currency=store.currency, subtotal_minor=subtotal, total_minor=subtotal)
         self.db.add(order)
         await self.db.flush()
         for item, product, variant, unit_price in snapshots:
             label = None
             sku = product.sku
             if variant:
-                label = ", ".join(
-                    f"{link.option_value.option.name}: {link.option_value.name}"
-                    for link in variant.option_value_links
-                    if link.option_value and link.option_value.option
-                ) or None
+                label = ", ".join(f"{link.option_value.option.name}: {link.option_value.name}" for link in variant.option_value_links if link.option_value and link.option_value.option) or None
                 sku = variant.sku or product.sku
-            self.db.add(
-                OrderItem(
-                    public_id=secrets.token_hex(16),
-                    order_id=order.id,
-                    product_id=product.id,
-                    variant_id=variant.id if variant else None,
-                    product_name=product.name,
-                    variant_label=label,
-                    sku=sku,
-                    quantity=item.quantity,
-                    unit_price_minor=unit_price,
-                    line_total_minor=unit_price * item.quantity,
-                )
-            )
+            self.db.add(OrderItem(public_id=secrets.token_hex(16), order_id=order.id, product_id=product.id, variant_id=variant.id if variant else None, product_name=product.name, variant_label=label, sku=sku, quantity=item.quantity, unit_price_minor=unit_price, line_total_minor=unit_price * item.quantity))
             inventory_owner = variant or product
             if inventory_owner.inventory_tracking:
                 inventory_owner.inventory_quantity -= item.quantity
@@ -206,14 +129,7 @@ class CommerceService:
 
     async def list_orders(self, user: User, tenant_public_id: str, offset: int, limit: int, status_public_id: str | None):
         store = await resolve_store(self.db, user, tenant_public_id, "orders.read")
-        stmt = (
-            select(Order)
-            .options(selectinload(Order.status), selectinload(Order.items).selectinload(OrderItem.product), selectinload(Order.items).selectinload(OrderItem.variant))
-            .where(Order.store_id == store.id)
-            .order_by(Order.created_at.desc(), Order.id.desc())
-            .offset(offset)
-            .limit(limit)
-        )
+        stmt = select(Order).options(selectinload(Order.status), selectinload(Order.items).selectinload(OrderItem.product), selectinload(Order.items).selectinload(OrderItem.variant)).where(Order.store_id == store.id).order_by(Order.created_at.desc(), Order.id.desc()).offset(offset).limit(limit)
         if status_public_id:
             stmt = stmt.join(Order.status).where(OrderStatus.public_id == status_public_id)
         return list((await self.db.scalars(stmt)).unique().all())
@@ -226,15 +142,13 @@ class CommerceService:
         return order
 
     async def update_order_status(self, user: User, tenant_public_id: str, public_id: str, payload: OrderStatusUpdate) -> Order:
-        store = await resolve_store(self.db, user, tenant_public_id, "orders.manage")
+        store = await resolve_store(self.db, user, tenant_public_id, "orders.status.manage")
         order = await self._load_order_by_public_id(store.id, public_id)
         if order is None:
             raise HTTPException(status_code=404, detail="Order not found")
         if order.status.is_terminal:
             raise HTTPException(status_code=409, detail="A completed or cancelled order cannot be changed")
-        status = await self.db.scalar(
-            select(OrderStatus).where(OrderStatus.public_id == payload.status_public_id, OrderStatus.is_active.is_(True))
-        )
+        status = await self.db.scalar(select(OrderStatus).where(OrderStatus.public_id == payload.status_public_id, OrderStatus.is_active.is_(True)))
         if status is None:
             raise HTTPException(status_code=422, detail="Order status not found")
         order.status_id = status.id
@@ -258,24 +172,10 @@ class CommerceService:
         return await self.db.scalar(stmt)
 
     async def _load_cart(self, cart_id: int) -> Cart:
-        return await self.db.scalar(
-            select(Cart)
-            .options(
-                selectinload(Cart.items).selectinload(CartItem.product).selectinload(Product.media),
-                selectinload(Cart.items).selectinload(CartItem.variant)
-                .selectinload(ProductVariant.option_value_links)
-                .selectinload(ProductVariantOptionValue.option_value)
-                .selectinload(ProductOptionValue.option),
-            )
-            .where(Cart.id == cart_id)
-        )
+        return await self.db.scalar(select(Cart).options(selectinload(Cart.items).selectinload(CartItem.product).selectinload(Product.media), selectinload(Cart.items).selectinload(CartItem.variant).selectinload(ProductVariant.option_value_links).selectinload(ProductVariantOptionValue.option_value).selectinload(ProductOptionValue.option)).where(Cart.id == cart_id))
 
     async def _product_for_cart(self, store_id: int, public_id: str) -> Product:
-        product = await self.db.scalar(
-            select(Product)
-            .options(selectinload(Product.variants))
-            .where(Product.store_id == store_id, Product.public_id == public_id, Product.status == "active")
-        )
+        product = await self.db.scalar(select(Product).options(selectinload(Product.variants)).where(Product.store_id == store_id, Product.public_id == public_id, Product.status == "active"))
         if product is None:
             raise HTTPException(status_code=404, detail="Product not found")
         return product
@@ -286,14 +186,7 @@ class CommerceService:
             raise HTTPException(status_code=422, detail="Select a product option before adding this item")
         if public_id is None:
             return None
-        variant = await self.db.scalar(
-            select(ProductVariant).where(
-                ProductVariant.store_id == store_id,
-                ProductVariant.product_id == product.id,
-                ProductVariant.public_id == public_id,
-                ProductVariant.status == "active",
-            )
-        )
+        variant = await self.db.scalar(select(ProductVariant).where(ProductVariant.store_id == store_id, ProductVariant.product_id == product.id, ProductVariant.public_id == public_id, ProductVariant.status == "active"))
         if variant is None:
             raise HTTPException(status_code=422, detail="Selected product option is not available")
         return variant
@@ -319,18 +212,10 @@ class CommerceService:
         return await self.db.scalar(select(ProductVariant).where(ProductVariant.id == variant_id).with_for_update())
 
     async def _load_order(self, order_id: int) -> Order:
-        return await self.db.scalar(
-            select(Order)
-            .options(selectinload(Order.status), selectinload(Order.items).selectinload(OrderItem.product), selectinload(Order.items).selectinload(OrderItem.variant))
-            .where(Order.id == order_id)
-        )
+        return await self.db.scalar(select(Order).options(selectinload(Order.status), selectinload(Order.items).selectinload(OrderItem.product), selectinload(Order.items).selectinload(OrderItem.variant)).where(Order.id == order_id))
 
     async def _load_order_by_public_id(self, store_id: int, public_id: str) -> Order | None:
-        return await self.db.scalar(
-            select(Order)
-            .options(selectinload(Order.status), selectinload(Order.items).selectinload(OrderItem.product), selectinload(Order.items).selectinload(OrderItem.variant))
-            .where(Order.store_id == store_id, Order.public_id == public_id)
-        )
+        return await self.db.scalar(select(Order).options(selectinload(Order.status), selectinload(Order.items).selectinload(OrderItem.product), selectinload(Order.items).selectinload(OrderItem.variant)).where(Order.store_id == store_id, Order.public_id == public_id))
 
     async def _order_number(self) -> str:
         for _ in range(8):
