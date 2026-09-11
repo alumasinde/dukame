@@ -1,9 +1,13 @@
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Index, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
+
+if TYPE_CHECKING:
+    from app.modules.commerce.models.payment import Payment
 
 
 class PaymentMethod(Base):
@@ -22,9 +26,9 @@ class PaymentMethod(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
 
+    payments: Mapped[list["Payment"]] = relationship(back_populates="payment_method")
+
     __table_args__ = (
         Index("uq_payment_methods_store_code", "store_id", "code", unique=True),
         Index("ix_payment_methods_store_enabled", "store_id", "is_enabled", "sort_order"),
     )
-
-    payments = relationship("Payment", back_populates="payment_method")
