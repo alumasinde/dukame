@@ -1,10 +1,11 @@
 import uuid
 
-from fastapi import HTTPException
+from fastapi import HTTPException, UploadFile
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.storage import delete_local_media, save_product_image
 from app.modules.auth.models.identity import User
 from app.modules.catalogue.models.product import Product
 from app.modules.catalogue.repositories.media import ProductMediaRepository
@@ -35,6 +36,40 @@ class ProductMediaService:
         await self.db.commit()
         return await self.media.get(product.id, media.public_id)
 
+    async def upload(
+        self,
+        user: User,
+        tenant_public_id: str,
+        product_public_id: str,
+        file: UploadFile,
+        base_url: str,
+        alt_text: str | None,
+        sort_order: int,
+    ):
+        store = await resolve_store(self.db, user, tenant_public_id, "catalogue.manage")
+        product = await self._product(store.id, product_public_id)
+        relative_url = await save_product_image(file, tenant_public_id, product_public_id)
+        try:
+            payload = ProductMediaCreate(
+                url=f"{base_url.rstrip('/')}{relative_url}",
+                alt_text=alt_text,
+                media_type="image",
+                sort_order=sort_order,
+                status="active",
+            )
+            media = await self.media.create(
+                public_id=uuid.uuid4().hex,
+                store_id=store.id,
+                product_id=product.id,
+                **payload.model_dump(mode="json"),
+            )
+            await self.db.commit()
+        except Exception:
+            await self.db.rollback()
+            delete_local_media(relative_url)
+            raise
+        return await self.media.get(product.id, media.public_id)
+
     async def update(self, user: User, tenant_public_id: str, product_public_id: str, public_id: str, payload: ProductMediaUpdate):
         store = await resolve_store(self.db, user, tenant_public_id, "catalogue.manage")
         product = await self._product(store.id, product_public_id)
@@ -56,5 +91,7 @@ class ProductMediaService:
         media = await self.media.get(product.id, public_id)
         if media is None:
             raise HTTPException(status_code=404, detail="Media item not found")
+        local_url = media.url
         await self.media.delete(media)
         await self.db.commit()
+        delete_local_media(local_url)
