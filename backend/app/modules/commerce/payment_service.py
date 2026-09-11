@@ -68,8 +68,7 @@ class PaymentService:
         callback_token = config.get("callback_token")
         if not callback_token or not payment.payment_method.callback_token_hash:
             raise HTTPException(status_code=503, detail="M-Pesa callback is not configured")
-        callback_url = self._callback_url(callback_token)
-        client = MpesaClient(config, callback_url)
+        client = MpesaClient(config, self._callback_url(callback_token))
         attempt_number = (await self.db.scalar(select(PaymentAttempt.attempt_number).where(PaymentAttempt.payment_id == payment.id).order_by(PaymentAttempt.attempt_number.desc()).limit(1)) or 0) + 1
         attempt = PaymentAttempt(public_id=secrets.token_hex(16), payment_id=payment.id, attempt_number=attempt_number, status="processing", phone=payment.customer_phone, amount_minor=payment.amount_minor)
         self.db.add(attempt)
@@ -259,6 +258,9 @@ class PaymentService:
             return
         order.status_id = confirmed.id
         self.db.add(OrderStatusHistory(order_id=order.id, status_id=confirmed.id, source="payment"))
+        store = await self.db.scalar(select(Store).where(Store.id == payment.store_id))
+        if store:
+            await queue_order_sms(self.db, order, confirmed, store.name, store.slug)
 
     @staticmethod
     def _amount_from_provider(value: object) -> int | None:
