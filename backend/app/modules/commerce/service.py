@@ -29,13 +29,24 @@ class CommerceService:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
 
+    @staticmethod
+    def _ensure_tz_aware(dt: datetime | None) -> datetime | None:
+        """Ensure datetime is timezone-aware, converting if necessary."""
+        if dt is None:
+            return None
+        return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
+
     async def get_or_create_cart(self, store: Store, token: str | None) -> tuple[Cart, str, bool]:
         if token:
             cart = await self._cart_by_token(store.id, token, lock=False)
-            if cart is not None and cart.checked_out_at is None and cart.expires_at > datetime.now(UTC):
-                return cart, token, False
+            now = datetime.now(UTC)
+            if cart is not None and cart.checked_out_at is None:
+                expires_at = self._ensure_tz_aware(cart.expires_at)
+                if expires_at > now:
+                    return cart, token, False
         raw_token = secrets.token_urlsafe(32)
-        cart = Cart(public_id=secrets.token_hex(16), store_id=store.id, session_token_hash=self._hash_token(raw_token), currency=store.currency, expires_at=datetime.now(UTC) + timedelta(seconds=settings.cart_session_ttl_seconds))
+        now = datetime.now(UTC)
+        cart = Cart(public_id=secrets.token_hex(16), store_id=store.id, session_token_hash=self._hash_token(raw_token), currency=store.currency, expires_at=now + timedelta(seconds=settings.cart_session_ttl_seconds))
         self.db.add(cart)
         await self.db.flush()
         return cart, raw_token, True
@@ -44,7 +55,7 @@ class CommerceService:
         cart, _, created = await self.get_or_create_cart(store, token)
         if created:
             await self.db.commit()
-            cart = await self._load_cart(cart.id)
+        cart = await self._load_cart(cart.id)
         return cart
 
     async def add_item(self, store: Store, token: str, payload: CartItemAdd) -> Cart:
@@ -87,7 +98,9 @@ class CommerceService:
 
     async def checkout(self, store: Store, token: str, payload: CheckoutRequest) -> Order:
         cart = await self._cart_by_token(store.id, token, lock=True)
-        if cart is None or cart.checked_out_at is not None or cart.expires_at <= datetime.now(UTC):
+        now = datetime.now(UTC)
+        expires_at = self._ensure_tz_aware(cart.expires_at) if cart else None
+        if cart is None or cart.checked_out_at is not None or expires_at is None or expires_at <= now:
             raise HTTPException(status_code=409, detail="Your cart has expired. Please start a new cart.")
         items = list((await self.db.scalars(select(CartItem).options(selectinload(CartItem.product).selectinload(Product.media), selectinload(CartItem.variant).selectinload(ProductVariant.option_value_links).selectinload(ProductVariantOptionValue.option_value).selectinload(ProductOptionValue.option)).where(CartItem.cart_id == cart.id).with_for_update())).all())
         if not items:
@@ -161,7 +174,9 @@ class CommerceService:
 
     async def _require_cart(self, store_id: int, token: str) -> Cart:
         cart = await self._cart_by_token(store_id, token, lock=True)
-        if cart is None or cart.checked_out_at is not None or cart.expires_at <= datetime.now(UTC):
+        now = datetime.now(UTC)
+        expires_at = self._ensure_tz_aware(cart.expires_at) if cart else None
+        if cart is None or cart.checked_out_at is not None or expires_at is None or expires_at <= now:
             raise HTTPException(status_code=409, detail="Your cart has expired. Please start a new cart.")
         return cart
 
