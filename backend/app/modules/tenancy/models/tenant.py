@@ -18,12 +18,13 @@ class Tenant(Base):
     public_id: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     slug: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
-    business_type_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("business_types.id", ondelete="RESTRICT"))
+    business_type_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("business_types.id", ondelete="RESTRICT"), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False, server_default="active")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     memberships: Mapped[list["TenantUser"]] = relationship(back_populates="tenant", cascade="all, delete-orphan")
-    business_type: Mapped["BusinessType | None"] = relationship(back_populates="tenants")
+    business_type: Mapped["BusinessType"] = relationship(back_populates="tenants")
+    __table_args__ = (Index("ix_tenants_business_type_id", "business_type_id"),)
 
 
 class TenantUser(Base):
