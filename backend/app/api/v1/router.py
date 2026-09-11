@@ -9,12 +9,14 @@ from app.modules.rbac.routes.members import router as members_router
 from app.modules.rbac.routes.roles import router as roles_router
 from app.modules.storefront.routes import router as storefront_router
 from app.modules.subscriptions.routes.subscriptions import router as subscriptions_router
+from app.modules.tenancy.routes.business_types import router as business_types_router
 from app.modules.tenancy.routes.tenants import router as tenants_router
 
 api_router = APIRouter()
 api_router.include_router(health_router)
 api_router.include_router(auth_router)
 api_router.include_router(onboarding_router)
+api_router.include_router(business_types_router)
 api_router.include_router(tenants_router)
 api_router.include_router(subscriptions_router)
 api_router.include_router(roles_router)
