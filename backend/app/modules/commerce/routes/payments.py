@@ -22,7 +22,8 @@ router = APIRouter(tags=["payments"])
 
 
 def method_response(method: PaymentMethod, callback_url: str | None = None, callback_token: str | None = None) -> PaymentMethodResponse:
-    return PaymentMethodResponse(public_id=method.public_id, code=method.code, name=method.name, is_enabled=method.is_enabled, instructions=method.instructions, callback_url=callback_url, callback_token=callback_token)
+    display_code = "mpesa" if method.code == "mpesa_paybill" else method.code
+    return PaymentMethodResponse(public_id=method.public_id, code=display_code, name=method.name, is_enabled=method.is_enabled, instructions=method.instructions, callback_url=callback_url, callback_token=callback_token)
 
 
 @router.get("/storefront/{store_slug}/payment-methods", response_model=list[PaymentMethodResponse])
@@ -40,8 +41,26 @@ async def list_payment_methods(tenant_public_id: str, user: User = Depends(get_c
 
 @router.post("/tenants/{tenant_public_id}/payment-methods", response_model=PaymentMethodResponse)
 async def create_payment_method(tenant_public_id: str, payload: PaymentMethodCreate, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> PaymentMethodResponse:
-    if payload.code.strip().lower() == "card":
-        store = await resolve_store(db, user, tenant_public_id, "payments.manage")
+    normalized_code = payload.code.strip().lower()
+    store = await resolve_store(db, user, tenant_public_id, "payments.manage")
+    if normalized_code == "mpesa_paybill":
+        config = payload.config or {}
+        paybill = str(config.get("paybill_number", "")).strip()
+        account_mode = str(config.get("account_mode", "order_number")).strip()
+        if not paybill.isdigit() or not 5 <= len(paybill) <= 8:
+            raise HTTPException(status_code=422, detail="Enter a valid M-Pesa Paybill number")
+        if account_mode not in {"order_number", "customer_reference", "fixed"}:
+            raise HTTPException(status_code=422, detail="Invalid Paybill account mode")
+        if await db.scalar(select(PaymentMethod.id).where(PaymentMethod.store_id == store.id, PaymentMethod.code == normalized_code)):
+            raise HTTPException(status_code=409, detail="M-Pesa Paybill is already configured")
+        instructions = payload.instructions.strip() if payload.instructions else f"Pay via M-Pesa Paybill {paybill}. Use your DukaMe order number as the account reference."
+        method = PaymentMethod(public_id=secrets.token_hex(16), store_id=store.id, code=normalized_code, name=payload.name.strip() or "M-Pesa", is_enabled=payload.is_enabled, sort_order=20, instructions=instructions, config_encrypted=PaymentService.__dict__["_encrypt_manual_config"](config) if False else None)
+        from app.modules.commerce.payment_security import encrypt_config
+        method.config_encrypted = encrypt_config({"paybill_number": paybill, "account_mode": account_mode, "account_reference": str(config.get("account_reference", "")).strip()})
+        db.add(method)
+        await db.commit()
+        return method_response(method)
+    if normalized_code == "card":
         if await db.scalar(select(PaymentMethod.id).where(PaymentMethod.store_id == store.id, PaymentMethod.code == "card")):
             raise HTTPException(status_code=409, detail="Payment method already exists")
         method = PaymentMethod(public_id=secrets.token_hex(16), store_id=store.id, code="card", name=payload.name.strip(), is_enabled=payload.is_enabled, sort_order=30, instructions=payload.instructions.strip() if payload.instructions else "Accept card payments using your card terminal or configured card processor.")
@@ -54,6 +73,29 @@ async def create_payment_method(tenant_public_id: str, payload: PaymentMethodCre
 
 @router.patch("/tenants/{tenant_public_id}/payment-methods/{method_public_id}", response_model=PaymentMethodResponse)
 async def update_payment_method(tenant_public_id: str, method_public_id: str, payload: PaymentMethodUpdate, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> PaymentMethodResponse:
+    store = await resolve_store(db, user, tenant_public_id, "payments.manage")
+    method = await db.scalar(select(PaymentMethod).where(PaymentMethod.store_id == store.id, PaymentMethod.public_id == method_public_id))
+    if method is None:
+        raise HTTPException(status_code=404, detail="Payment method not found")
+    if method.code == "mpesa_paybill":
+        from app.modules.commerce.payment_security import decrypt_config, encrypt_config
+        current = decrypt_config(method.config_encrypted)
+        if payload.name is not None:
+            method.name = payload.name.strip()
+        if payload.instructions is not None:
+            method.instructions = payload.instructions.strip() or None
+        if payload.is_enabled is not None:
+            method.is_enabled = payload.is_enabled
+        if payload.config is not None:
+            merged = {**current, **payload.config}
+            paybill = str(merged.get("paybill_number", "")).strip()
+            if not paybill.isdigit() or not 5 <= len(paybill) <= 8:
+                raise HTTPException(status_code=422, detail="Enter a valid M-Pesa Paybill number")
+            if str(merged.get("account_mode", "order_number")) not in {"order_number", "customer_reference", "fixed"}:
+                raise HTTPException(status_code=422, detail="Invalid Paybill account mode")
+            method.config_encrypted = encrypt_config(merged)
+        await db.commit()
+        return method_response(method)
     method, callback_url = await PaymentService(db).update_method(user, tenant_public_id, method_public_id, payload.name, payload.instructions, payload.is_enabled, payload.config)
     return method_response(method, callback_url)
 
@@ -85,11 +127,11 @@ async def mark_cash_payment_paid(tenant_public_id: str, payment_public_id: str, 
 @router.patch("/tenants/{tenant_public_id}/payments/{payment_public_id}/manual-paid", response_model=PaymentResponse)
 async def mark_manual_payment_paid(tenant_public_id: str, payment_public_id: str, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> PaymentResponse:
     store = await resolve_store(db, user, tenant_public_id, "payments.manage")
-    payment = await db.scalar(select(Payment).where(Payment.public_id == payment_public_id, Payment.store_id == store.id).options())
+    payment = await db.scalar(select(Payment).where(Payment.public_id == payment_public_id, Payment.store_id == store.id))
     if payment is None:
         raise HTTPException(status_code=404, detail="Payment not found")
-    if payment.payment_method.code not in {"cash", "card"}:
-        raise HTTPException(status_code=422, detail="Only cash or card payments can be manually marked paid")
+    if payment.payment_method.code not in {"cash", "card", "mpesa_paybill"}:
+        raise HTTPException(status_code=422, detail="Only manual cash, M-Pesa Paybill or card payments can be marked paid")
     if payment.status == "paid":
         return PaymentResponse.model_validate(payment_response(payment))
     if payment.status in {"refunded", "partially_refunded", "cancelled"}:
