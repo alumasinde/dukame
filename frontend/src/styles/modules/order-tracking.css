@@ -44,6 +44,8 @@
 .order-summary-total strong { font-size: 17px; }
 .order-summary-note { margin: 12px 0; padding: 9px; border-radius: 8px; background: #f6faf9; color: #667671; font-size: 8px; line-height: 1.5; }
 .order-copy-link { display: block; margin-bottom: 10px; color: var(--primary); font-size: 9px; font-weight: 800; text-align: center; text-decoration: none; }
+.storefront-success-actions { display: flex; justify-content: center; flex-wrap: wrap; gap: 9px; }
+.storefront-success-notice { margin: 14px auto 0 !important; color: #7c8985 !important; font-size: 9px !important; }
 .order-tracking-state { min-height: calc(100vh - 68px); display: grid; place-items: center; align-content: center; gap: 9px; padding: 24px; text-align: center; }
 .order-tracking-state p { margin: 0; color: var(--muted); font-size: 11px; }
 .order-tracking-state h1 { margin: 0; font-size: 24px; }
@@ -57,7 +59,6 @@
 }
 @media (max-width: 560px) {
   .order-tracking-header { height: 62px; padding: 0 12px; }
-  .order-tracking-header .storefront-brand-copy { display: none; }
   .order-tracking-shop { font-size: 9px; }
   .order-tracking-shell { width: min(100% - 24px, 560px); padding-top: 22px; }
   .order-tracking-heading { align-items: flex-start; flex-direction: column; gap: 12px; }
@@ -66,4 +67,5 @@
   .order-progress-card { padding: 16px; }
   .order-progress-head { flex-direction: column; gap: 7px; }
   .order-progress-head small { white-space: normal; }
+  .storefront-success-actions { flex-direction: column; }
 }
