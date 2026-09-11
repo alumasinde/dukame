@@ -47,6 +47,8 @@ def product_response(product: Product, include_variants: bool = False) -> Storef
         price_minor=product.price_minor,
         compare_at_price_minor=product.compare_at_price_minor,
         currency=product.currency,
+        inventory_tracking=product.inventory_tracking,
+        inventory_quantity=product.inventory_quantity,
         category=(
             {
                 "public_id": product.category.public_id,
