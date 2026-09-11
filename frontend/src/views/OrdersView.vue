@@ -1,62 +1,59 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useAuthStore } from '../stores/auth'
-import { getOrder, getOrderStatuses, getOrders, updateOrderStatus, type Order, type OrderStatus } from '../lib/cart'
+import { getNextOrderStatuses, getOrder, getOrderStatuses, getOrders, updateOrderStatus, type Order, type OrderStatus } from '../lib/cart'
 
 const auth = useAuthStore()
 const orders = ref<Order[]>([])
 const statuses = ref<OrderStatus[]>([])
+const nextStatuses = ref<OrderStatus[]>([])
 const selectedOrder = ref<Order | null>(null)
 const selectedStatus = ref('')
 const loading = ref(true)
 const updating = ref(false)
 const error = ref('')
-
+const actionLoading = ref(false)
 const tenantId = computed(() => auth.activeTenant?.public_id || '')
 
-function money(minor: number, currency: string) {
-  return new Intl.NumberFormat('en-KE', { style: 'currency', currency, maximumFractionDigits: 2 }).format(minor / 100)
-}
+function money(minor: number, currency: string) { return new Intl.NumberFormat('en-KE', { style: 'currency', currency, maximumFractionDigits: 2 }).format(minor / 100) }
 function date(value: string) { return new Intl.DateTimeFormat('en-KE', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) }
 function apiError(err: any, fallback: string) { return err?.response?.data?.detail || fallback }
 function statusClass(status: OrderStatus) { return status.is_terminal ? 'commerce-status commerce-status-terminal' : 'commerce-status commerce-status-progress' }
 
 async function load() {
   if (!tenantId.value) return
-  loading.value = true
-  error.value = ''
+  loading.value = true; error.value = ''
   try {
-    const [ordersResponse, statusesResponse] = await Promise.all([
-      getOrders(tenantId.value, { limit: 100, status_public_id: selectedStatus.value || undefined }),
-      getOrderStatuses(tenantId.value),
-    ])
-    orders.value = ordersResponse.data
-    statuses.value = statusesResponse.data
-  } catch (err: any) {
-    error.value = apiError(err, 'We could not load your orders.')
-  } finally {
-    loading.value = false
-  }
+    const [ordersResponse, statusesResponse] = await Promise.all([getOrders(tenantId.value, { limit: 100, status_public_id: selectedStatus.value || undefined }), getOrderStatuses(tenantId.value)])
+    orders.value = ordersResponse.data; statuses.value = statusesResponse.data
+  } catch (err: any) { error.value = apiError(err, 'We could not load your orders.') }
+  finally { loading.value = false }
+}
+
+async function loadNextStatuses(order: Order) {
+  if (!tenantId.value || order.status.is_terminal) { nextStatuses.value = []; return }
+  try { nextStatuses.value = (await getNextOrderStatuses(tenantId.value, order.public_id)).data }
+  catch (err: any) { nextStatuses.value = []; error.value = apiError(err, 'We could not load the next order actions.') }
 }
 
 async function openOrder(order: Order) {
   if (!tenantId.value) return
-  try { selectedOrder.value = (await getOrder(tenantId.value, order.public_id)).data } catch (err: any) { error.value = apiError(err, 'We could not load that order.') }
+  try {
+    selectedOrder.value = (await getOrder(tenantId.value, order.public_id)).data
+    await loadNextStatuses(selectedOrder.value)
+  } catch (err: any) { error.value = apiError(err, 'We could not load that order.') }
 }
 
 async function changeStatus(statusId: string) {
-  if (!tenantId.value || !selectedOrder.value || !statusId) return
-  updating.value = true
-  error.value = ''
+  if (!tenantId.value || !selectedOrder.value || !statusId || updating.value) return
+  updating.value = true; actionLoading.value = true; error.value = ''
   try {
     selectedOrder.value = (await updateOrderStatus(tenantId.value, selectedOrder.value.public_id, statusId)).data
     const index = orders.value.findIndex(item => item.public_id === selectedOrder.value?.public_id)
     if (index >= 0 && selectedOrder.value) orders.value[index] = selectedOrder.value
-  } catch (err: any) {
-    error.value = apiError(err, 'We could not update the order status.')
-  } finally {
-    updating.value = false
-  }
+    await loadNextStatuses(selectedOrder.value)
+  } catch (err: any) { error.value = apiError(err, 'We could not update the order status.') }
+  finally { updating.value = false; actionLoading.value = false }
 }
 
 onMounted(load)
@@ -86,10 +83,10 @@ onMounted(load)
         <div class="order-items"><div v-for="item in selectedOrder.items" :key="item.public_id" class="order-item-row"><div><strong>{{ item.product_name }}</strong><small v-if="item.variant_label">{{ item.variant_label }}</small><small>{{ item.quantity }} × {{ money(item.unit_price_minor, selectedOrder.currency) }}</small></div><strong>{{ money(item.line_total_minor, selectedOrder.currency) }}</strong></div></div>
         <div v-if="selectedOrder.notes" class="order-note"><span>Customer note</span><p>{{ selectedOrder.notes }}</p></div>
         <div class="order-total"><span>Total</span><strong>{{ money(selectedOrder.total_minor, selectedOrder.currency) }}</strong></div>
-        <label class="order-status-control"><span>Update status</span><select :value="selectedOrder.status.public_id" :disabled="updating || selectedOrder.status.is_terminal" @change="changeStatus(($event.target as HTMLSelectElement).value)"><option v-for="status in statuses" :key="status.public_id" :value="status.public_id">{{ status.name }}</option></select></label>
-        <p v-if="selectedOrder.status.is_terminal" class="commerce-muted">This order is in a final status and cannot be changed.</p>
+        <div v-if="nextStatuses.length" class="order-next-actions"><span>Next step</span><div><button v-for="status in nextStatuses" :key="status.public_id" type="button" class="button button-primary button-block" :disabled="actionLoading" @click="changeStatus(status.public_id)">{{ actionLoading ? 'Updating…' : status.name }}</button></div></div>
+        <p v-else class="commerce-muted">{{ selectedOrder.status.is_terminal ? 'This order is in a final status.' : 'No valid next step is configured for this order.' }}</p>
       </aside>
-      <aside v-else class="order-detail-placeholder"><div class="commerce-empty-icon">←</div><h2>Select an order</h2><p>Choose an order to see the customer, items and status.</p></aside>
+      <aside v-else class="order-detail-placeholder"><div class="commerce-empty-icon">←</div><h2>Select an order</h2><p>Choose an order to see the customer, items and next available action.</p></aside>
     </div>
   </section>
 </template>
