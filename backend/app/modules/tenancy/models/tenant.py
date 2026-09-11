@@ -9,6 +9,7 @@ from app.models.base import Base
 if TYPE_CHECKING:
     from app.modules.auth.models.identity import User
     from app.modules.rbac.models.rbac import TenantRole
+    from app.modules.tenancy.models.business_type import BusinessType
 
 
 class Tenant(Base):
@@ -17,10 +18,12 @@ class Tenant(Base):
     public_id: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     slug: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    business_type_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("business_types.id", ondelete="RESTRICT"))
     status: Mapped[str] = mapped_column(String(32), nullable=False, server_default="active")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     memberships: Mapped[list["TenantUser"]] = relationship(back_populates="tenant", cascade="all, delete-orphan")
+    business_type: Mapped["BusinessType | None"] = relationship(back_populates="tenants")
 
 
 class TenantUser(Base):
