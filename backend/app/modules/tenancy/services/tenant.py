@@ -7,6 +7,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
 from app.core.time import utc_now
@@ -50,13 +51,7 @@ async def ensure_default_roles(db: AsyncSession, tenant_id: int) -> TenantRole:
     return by_slug["owner"]
 
 
-async def create_tenant(
-    db: AsyncSession,
-    user: User,
-    name: str,
-    slug: str | None,
-    business_type_id: int | None = None,
-) -> tuple[Tenant, Subscription]:
+async def create_tenant(db: AsyncSession, user: User, name: str, slug: str | None, business_type_id: int | None = None) -> tuple[Tenant, Subscription]:
     tenant_slug = slugify(slug or name)
     if len(tenant_slug) < 3:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="A valid business name or link is required")
@@ -65,16 +60,13 @@ async def create_tenant(
     plan = cast(Plan | None, await db.scalar(select(Plan).where(Plan.slug == settings.default_plan_slug, Plan.is_active.is_(True))))
     if plan is None:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Default subscription plan is unavailable")
-
     business_name = name.strip()
     tenant = Tenant(public_id=uuid.uuid4().hex, name=business_name, slug=tenant_slug, business_type_id=business_type_id)
     db.add(tenant)
     await db.flush()
-
     store = Store(public_id=uuid.uuid4().hex, tenant_id=tenant.id, name=business_name, slug=tenant_slug, status="active", currency="KES")
     db.add(store)
     await db.flush()
-
     owner_role = await ensure_default_roles(db, tenant.id)
     db.add(TenantUser(tenant_id=tenant.id, user_id=user.id, role="owner", role_id=owner_role.id, status="active"))
     start = utc_now()
@@ -98,5 +90,11 @@ async def get_tenant_by_public_id(db: AsyncSession, public_id: str) -> Tenant | 
 
 
 async def get_user_tenants(db: AsyncSession, user_id: int) -> list[tuple[Tenant, TenantUser]]:
-    result = await db.execute(select(Tenant, TenantUser).join(TenantUser, TenantUser.tenant_id == Tenant.id).where(TenantUser.user_id == user_id, TenantUser.status == "active").order_by(Tenant.name))
+    result = await db.execute(
+        select(Tenant, TenantUser)
+        .options(selectinload(Tenant.business_type))
+        .join(TenantUser, TenantUser.tenant_id == Tenant.id)
+        .where(TenantUser.user_id == user_id, TenantUser.status == "active")
+        .order_by(Tenant.name)
+    )
     return [(row[0], row[1]) for row in result.all()]
