@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import { getStorefrontDisplayBase } from '../lib/storefront-url'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -9,6 +10,7 @@ const businessName = ref('')
 const businessSlug = ref('')
 const error = ref('')
 const draftKey = 'dukame_onboarding_draft'
+const storefrontDisplayBase = getStorefrontDisplayBase()
 
 const suggestedSlug = computed(() => businessName.value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 100))
 
@@ -50,7 +52,7 @@ onMounted(loadDraft)
       <div v-if="error" class="alert alert-danger" role="alert">{{ error }}</div>
       <form class="onboarding-form" @submit.prevent="submit" novalidate>
         <label class="field-group"><span>Business name</span><input v-model="businessName" type="text" autocomplete="organization" maxlength="255" placeholder="e.g. Best Collections" required autofocus /></label>
-        <label class="field-group"><span>Store link</span><div class="input-prefix"><span>dukame.shop/</span><input v-model="businessSlug" type="text" maxlength="100" pattern="[a-z0-9]+(?:-[a-z0-9]+)*" autocomplete="off" placeholder="best-collections" @focus="ensureSlug" /></div></label>
+        <label class="field-group"><span>Store link</span><div class="input-prefix"><span>{{ storefrontDisplayBase }}</span><input v-model="businessSlug" type="text" maxlength="100" pattern="[a-z0-9]+(?:-[a-z0-9]+)*" autocomplete="off" placeholder="best-collections" @focus="ensureSlug" /></div></label>
         <button v-if="businessSlug !== suggestedSlug && suggestedSlug" type="button" class="suggestion" @click="businessSlug = suggestedSlug">Use {{ suggestedSlug }}</button>
         <button class="button button-primary button-lg button-block" type="submit" :disabled="auth.loading"><span v-if="auth.loading" class="button-spinner" aria-hidden="true"></span><template v-else>Continue</template></button>
       </form>
