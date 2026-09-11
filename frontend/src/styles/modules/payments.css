@@ -1,0 +1,22 @@
+.payments-methods-card, .payments-config-card, .payments-callback-card { padding: 18px; border: 1px solid var(--line); border-radius: 14px; background: #fff; box-shadow: var(--shadow-sm); margin-bottom: 16px; }
+.payments-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; margin-bottom: 16px; }
+.payments-card-head h2, .payments-callback-card h2 { margin: 0 0 4px; font-size: 17px; }
+.payments-card-head p, .payments-callback-card p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.6; }
+.payments-method-list { display: grid; gap: 8px; }
+.payments-method-row { display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid #e7eeec; border-radius: 10px; background: #fbfcfc; }
+.payments-method-icon { width: 38px; height: 38px; display: grid; place-items: center; flex: 0 0 38px; border-radius: 10px; background: var(--soft); color: var(--primary); font-weight: 850; }
+.payments-method-copy { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 3px; }
+.payments-method-copy strong { font-size: 12px; }
+.payments-method-copy span { color: var(--muted); font-size: 10px; }
+.payments-enabled { padding: 5px 8px; border-radius: 999px; background: #e8f7f3; color: var(--primary); font-size: 9px; font-weight: 800; }
+.payments-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 13px; }
+.payments-form-grid label { display: flex; flex-direction: column; gap: 6px; }
+.payments-form-grid label span { font-size: 10px; font-weight: 750; }
+.payments-form-grid input, .payments-form-grid select, .payments-form-grid textarea { width: 100%; min-height: 40px; padding: 0 11px; border: 1px solid var(--line); border-radius: 9px; background: #fff; color: var(--ink); outline: 0; font: inherit; font-size: 12px; }
+.payments-form-grid textarea { padding-top: 10px; resize: vertical; }
+.payments-form-grid input:focus, .payments-form-grid select:focus, .payments-form-grid textarea:focus { border-color: #9dd8ce; box-shadow: 0 0 0 3px rgba(38,145,132,.08); }
+.payments-form-full { grid-column: 1 / -1; }
+.payments-config-actions { display: flex; justify-content: flex-end; margin-top: 16px; }
+.payments-callback-card code { display: block; margin-top: 10px; padding: 10px; overflow-x: auto; border-radius: 8px; background: #f3f6f5; color: #52645f; font-size: 10px; word-break: break-all; }
+.payments-callback-card details { margin-top: 10px; color: var(--muted); font-size: 10px; }
+@media (max-width: 700px) { .payments-card-head { flex-direction: column; } .payments-form-grid { grid-template-columns: 1fr; } .payments-form-full { grid-column: auto; } .payments-config-actions { justify-content: stretch; } .payments-config-actions .button { width: 100%; } }
