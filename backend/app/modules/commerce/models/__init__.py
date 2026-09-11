@@ -6,6 +6,10 @@ from app.modules.commerce.models.order_notification import OrderNotification
 from app.modules.commerce.models.order_status import OrderStatus
 from app.modules.commerce.models.order_status_history import OrderStatusHistory
 from app.modules.commerce.models.order_status_transition import OrderStatusTransition
+from app.modules.commerce.models.payment import Payment
+from app.modules.commerce.models.payment_attempt import PaymentAttempt
+from app.modules.commerce.models.payment_event import PaymentEvent
+from app.modules.commerce.models.payment_method import PaymentMethod
 
 __all__ = [
     "Cart",
@@ -16,4 +20,8 @@ __all__ = [
     "OrderStatus",
     "OrderStatusHistory",
     "OrderStatusTransition",
+    "Payment",
+    "PaymentAttempt",
+    "PaymentEvent",
+    "PaymentMethod",
 ]
