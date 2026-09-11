@@ -22,7 +22,7 @@ class OrderStatusHistory(Base):
     source: Mapped[str] = mapped_column(String(32), nullable=False, server_default="merchant")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
-    order: Mapped["Order"] = relationship()
+    order: Mapped["Order"] = relationship(back_populates="status_history")
     status: Mapped["OrderStatus"] = relationship()
     actor_user: Mapped["User | None"] = relationship()
 
