@@ -2,11 +2,11 @@ import { api } from './api'
 
 export interface CartItem { public_id: string; product_public_id: string; product_name: string; product_slug: string; variant_public_id: string | null; variant_label: string | null; sku: string | null; image_url: string | null; quantity: number; unit_price_minor: number; line_total_minor: number; currency: string }
 export interface Cart { public_id: string; currency: string; items: CartItem[]; item_count: number; subtotal_minor: number }
-export interface PaymentMethod { public_id: string; code: string; name: string; instructions?: string | null; is_enabled?: boolean; callback_url?: string | null; callback_token?: string | null }
+export interface PaymentMethod { public_id: string; code: string; name: string; payment_type?: 'paybill' | 'till' | 'stk_push' | string | null; instructions?: string | null; is_enabled?: boolean; callback_url?: string | null; callback_token?: string | null }
 export interface Payment { public_id: string; status: string; amount_minor: number; currency: string; method: PaymentMethod; failure_reason?: string | null; paid_at?: string | null; provider_reference?: string | null }
 export interface PaymentListItem extends Payment { order_public_id: string; order_number: string; customer_first_name: string; customer_last_name: string; customer_phone: string; attempt_count: number; created_at: string }
 export interface CheckoutPayload { first_name: string; last_name: string; phone: string; email?: string; notes?: string; payment_method_public_id?: string }
-export interface PaymentMethodConfig { consumer_key: string; consumer_secret: string; shortcode: string; passkey: string; environment: 'sandbox' | 'production'; transaction_type?: string; account_reference?: string; transaction_desc?: string }
+export interface PaymentMethodConfig { consumer_key: string; consumer_secret: string; shortcode: string; passkey: string; environment: 'sandbox' | 'production'; transaction_type: 'CustomerPayBillOnline' | 'CustomerBuyGoodsOnline'; account_reference?: string; transaction_desc?: string }
 export interface OrderStatus { public_id: string; code: string; name: string; description: string | null; sort_order: number; is_terminal: boolean }
 export interface OrderStatusHistory { status: OrderStatus; source: string; created_at: string }
 export interface OrderItem { public_id: string; product_public_id: string; variant_public_id: string | null; product_name: string; variant_label: string | null; sku: string | null; quantity: number; unit_price_minor: number; line_total_minor: number }
@@ -24,6 +24,7 @@ export function getOrderTracking(storeSlug: string, token: string) { return api.
 export function getPaymentMethodsForTenant(tenantPublicId: string) { return api.get<PaymentMethod[]>(`/tenants/${encodeURIComponent(tenantPublicId)}/payment-methods`) }
 export function createPaymentMethod(tenantPublicId: string, payload: { code: string; name: string; instructions?: string; is_enabled?: boolean; config?: Record<string, string> }) { return api.post<PaymentMethod>(`/tenants/${encodeURIComponent(tenantPublicId)}/payment-methods`, payload) }
 export function updatePaymentMethod(tenantPublicId: string, methodPublicId: string, payload: { name?: string; instructions?: string; is_enabled?: boolean; config?: Record<string, string> }) { return api.patch<PaymentMethod>(`/tenants/${encodeURIComponent(tenantPublicId)}/payment-methods/${encodeURIComponent(methodPublicId)}`, payload) }
+export function testPaymentMethod(tenantPublicId: string, methodPublicId: string) { return api.post<{ status: string; message: string }>(`/tenants/${encodeURIComponent(tenantPublicId)}/payment-methods/${encodeURIComponent(methodPublicId)}/test`) }
 export function getPayments(tenantPublicId: string, params?: { offset?: number; limit?: number; status?: string }) { return api.get<PaymentListItem[]>(`/tenants/${encodeURIComponent(tenantPublicId)}/payments`, { params }) }
 export function getPayment(tenantPublicId: string, paymentPublicId: string) { return api.get<PaymentListItem>(`/tenants/${encodeURIComponent(tenantPublicId)}/payments/${encodeURIComponent(paymentPublicId)}`) }
 export function retryPayment(tenantPublicId: string, paymentPublicId: string) { return api.post<Payment>(`/tenants/${encodeURIComponent(tenantPublicId)}/payments/${encodeURIComponent(paymentPublicId)}/retry`) }
