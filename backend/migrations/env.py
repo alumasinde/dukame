@@ -10,7 +10,7 @@ from app.models.base import Base
 from app.modules.auth.models.identity import AuthSession, User  # noqa: F401
 from app.modules.auth.models.tokens import PasswordResetToken, VerificationToken  # noqa: F401
 from app.modules.catalogue.models import Category, Product, ProductMedia, ProductOption, ProductOptionValue, ProductVariant, ProductVariantOptionValue, Store  # noqa: F401
-from app.modules.commerce.models import Cart, CartItem, Order, OrderItem, OrderNotification, OrderStatus, OrderStatusHistory, OrderStatusTransition  # noqa: F401
+from app.modules.commerce.models import Cart, CartItem, Order, OrderItem, OrderNotification, OrderStatus, OrderStatusHistory, OrderStatusTransition, Payment, PaymentAttempt, PaymentEvent, PaymentMethod  # noqa: F401
 from app.modules.rbac.models.rbac import Permission, TenantRole, TenantRolePermission  # noqa: F401
 from app.modules.subscriptions.models.subscription import Plan, PlanFeature, Subscription, SubscriptionEvent  # noqa: F401
 from app.modules.tenancy.models.business_type import BusinessType  # noqa: F401
