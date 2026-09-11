@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { LayoutDashboard, Package, FolderOpen, ShoppingCart, Users, CreditCard, BarChart3, Settings, LogOut, Menu, X, ChevronDown, PanelLeftClose, PanelLeftOpen } from '@lucide/vue'
 
-defineProps<{ collapsed: boolean }>()
+const props = defineProps<{ collapsed: boolean }>()
 const emit = defineEmits<{ toggleCollapse: [] }>()
 
 const router = useRouter()
@@ -30,7 +30,7 @@ const navItems = [
 const currentPath = computed(() => route.path)
 function isActive(path: string) { return currentPath.value === path || currentPath.value.startsWith(`${path}/`) }
 function toggleGroup(key: string) {
-  if (key === 'catalogue' && !isMobile.value && collapsed.value) {
+  if (key === 'catalogue' && props.collapsed) {
     emit('toggleCollapse')
     openGroups.value[key] = true
     return
@@ -40,9 +40,6 @@ function toggleGroup(key: string) {
 function navigate(path: string) { router.push(path); mobileMenuOpen.value = false }
 async function handleLogout() { await auth.logout(); router.push('/login') }
 watch(currentPath, path => { if (path.startsWith('/catalogue/')) openGroups.value.catalogue = true })
-const isMobile = computed(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 800px)').matches)
-const collapsed = computed(() => props.collapsed)
-const props = defineProps<{ collapsed: boolean }>()
 </script>
 
 <template>
