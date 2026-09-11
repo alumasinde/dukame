@@ -8,6 +8,7 @@ from app.modules.auth.models.identity import User
 from app.modules.catalogue.repositories.store import StoreRepository
 from app.modules.catalogue.schemas.store import StoreCreate, StoreUpdate
 from app.modules.catalogue.services.context import resolve_store
+from app.modules.rbac.services.rbac import require_permission
 from app.modules.tenancy.services.tenant import get_tenant_by_public_id
 
 
@@ -23,7 +24,7 @@ class StoreService:
         tenant = await get_tenant_by_public_id(self.db, tenant_public_id)
         if tenant is None:
             raise HTTPException(status_code=404, detail="Tenant not found")
-        await __import__("app.modules.rbac.services.rbac", fromlist=["require_permission"]).require_permission(self.db, user, tenant.id, "catalogue.manage")
+        await require_permission(self.db, user, tenant.id, "catalogue.manage")
         if await self.repository.get_by_tenant_id(tenant.id):
             raise HTTPException(status_code=409, detail="Store already exists")
         if await self.repository.get_by_slug(payload.slug):
