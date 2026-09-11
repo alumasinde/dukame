@@ -31,14 +31,15 @@ class Settings(BaseSettings):
     cart_session_ttl_seconds: int = Field(default=2592000, ge=3600, le=31536000)
     cart_item_max_quantity: int = Field(default=1000, ge=1, le=100000)
     trusted_hosts: list[str] = Field(default_factory=lambda: ["localhost", "127.0.0.1", "dukamedev.local"])
-    cors_origins: list[str] = Field(
-        default_factory=lambda: [
-            "http://localhost:5173",
-            "http://127.0.0.1:5173",
-            "http://dukamedev.local:5173",
-        ]
-    )
+    cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173", "http://127.0.0.1:5173", "http://dukamedev.local:5173"])
     frontend_base_url: str = "http://dukamedev.local:5173"
+    sms_provider: str = "none"
+    sms_api_key: SecretStr | None = None
+    sms_username: str | None = None
+    sms_sender_id: str | None = None
+    sms_api_url: str = "https://api.africastalking.com/version1/messaging"
+    notification_poll_seconds: float = Field(default=2.0, ge=1.0, le=60.0)
+    notification_max_attempts: int = Field(default=5, ge=1, le=20)
 
     @field_validator("environment")
     @classmethod
