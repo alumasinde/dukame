@@ -26,7 +26,7 @@ class Payment(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
 
     order = relationship("Order", back_populates="payment")
-    payment_method = relationship("PaymentMethod", back_populates="payments")
+    payment_method = relationship("PaymentMethod", back_populates="payments", lazy="selectin")
     attempts = relationship("PaymentAttempt", back_populates="payment", cascade="all, delete-orphan", order_by="PaymentAttempt.created_at")
     events = relationship("PaymentEvent", back_populates="payment", cascade="all, delete-orphan", order_by="PaymentEvent.created_at")
 
