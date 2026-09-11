@@ -17,6 +17,7 @@ const error = ref('')
 const selectedImage = ref(0)
 const descriptionExpanded = ref(false)
 const quantity = ref(1)
+const isFavorite = ref(false)
 const selectedOptions = reactive<Record<string, string>>({})
 const DESCRIPTION_LIMIT = 420
 
@@ -29,20 +30,15 @@ const simpleProductUnavailable = computed(() => !!product.value && !product.valu
 const displayPrice = computed(() => selectedVariant.value?.price_minor ?? product.value?.price_minor ?? 0)
 
 function money(minor: number, currency: string) { return new Intl.NumberFormat('en-KE', { style: 'currency', currency, maximumFractionDigits: 2 }).format(minor / 100) }
+function favoriteKey() { return `dukame:favorites:${storeSlug}` }
+function loadFavorite() { if (!product.value) return; try { const saved = JSON.parse(localStorage.getItem(favoriteKey()) || '[]'); isFavorite.value = Array.isArray(saved) && saved.includes(product.value.public_id) } catch { isFavorite.value = false } }
+function toggleFavorite() { if (!product.value) return; let saved: string[] = []; try { const parsed = JSON.parse(localStorage.getItem(favoriteKey()) || '[]'); saved = Array.isArray(parsed) ? parsed : [] } catch { saved = [] }; saved = saved.includes(product.value.public_id) ? saved.filter(id => id !== product.value!.public_id) : [...saved, product.value.public_id]; localStorage.setItem(favoriteKey(), JSON.stringify(saved)); isFavorite.value = saved.includes(product.value.public_id) }
 function setOption(optionId: string, valueId: string) { selectedOptions[optionId] = valueId; added.value = false; error.value = '' }
 function variantStockLabel() { if (!selectedVariant.value) return ''; if (!selectedVariant.value.inventory_tracking) return 'Available'; if (selectedVariant.value.inventory_quantity <= 0) return 'Not Available'; return `${selectedVariant.value.inventory_quantity} available` }
 function increaseQuantity() { const available = selectedVariant.value?.inventory_tracking ? selectedVariant.value.inventory_quantity : product.value?.inventory_tracking && !product.value.variants.length ? product.value.inventory_quantity : undefined; if (available !== undefined && quantity.value >= available) return; quantity.value += 1 }
-async function addToCart() {
-  if (!product.value || selectedVariantUnavailable.value || simpleProductUnavailable.value) return
-  const available = selectedVariant.value?.inventory_tracking ? selectedVariant.value.inventory_quantity : !product.value.variants.length && product.value.inventory_tracking ? product.value.inventory_quantity : undefined
-  if (available !== undefined && available < quantity.value) { error.value = `Only ${available} item(s) are available.`; return }
-  adding.value = true; error.value = ''; added.value = false
-  try { const response = await addCartItem(storeSlug, product.value.public_id, quantity.value, selectedVariant.value?.public_id); cartState.update(storeSlug, response.data); added.value = true }
-  catch (err: any) { error.value = err?.response?.data?.detail || 'We could not add this product to your cart.' }
-  finally { adding.value = false }
-}
+async function addToCart() { if (!product.value || selectedVariantUnavailable.value || simpleProductUnavailable.value) return; const available = selectedVariant.value?.inventory_tracking ? selectedVariant.value.inventory_quantity : !product.value.variants.length && product.value.inventory_tracking ? product.value.inventory_quantity : undefined; if (available !== undefined && available < quantity.value) { error.value = `Only ${available} item(s) are available.`; return }; adding.value = true; error.value = ''; added.value = false; try { const response = await addCartItem(storeSlug, product.value.public_id, quantity.value, selectedVariant.value?.public_id); cartState.update(storeSlug, response.data); added.value = true } catch (err: any) { error.value = err?.response?.data?.detail || 'We could not add this product to your cart.' } finally { adding.value = false } }
 
-onMounted(async () => { try { const [productResponse, storeResponse] = await Promise.all([getStorefrontProduct(storeSlug, String(route.params.productSlug)), getStorefront(storeSlug), cartState.load(storeSlug)]); product.value = productResponse.data; storeName.value = storeResponse.data.name; document.title = `${product.value.name} · ${storeName.value}`; for (const group of optionGroups.value) selectedOptions[group.public_id] = group.values[0]?.public_id || '' } catch (err: any) { error.value = err?.response?.data?.detail || 'This product could not be found.' } finally { loading.value = false } })
+onMounted(async () => { try { const [productResponse, storeResponse] = await Promise.all([getStorefrontProduct(storeSlug, String(route.params.productSlug)), getStorefront(storeSlug), cartState.load(storeSlug)]); product.value = productResponse.data; storeName.value = storeResponse.data.name; document.title = `${product.value.name} · ${storeName.value}`; for (const group of optionGroups.value) selectedOptions[group.public_id] = group.values[0]?.public_id || ''; loadFavorite() } catch (err: any) { error.value = err?.response?.data?.detail || 'This product could not be found.' } finally { loading.value = false } })
 </script>
 
 <template>
@@ -58,6 +54,7 @@ onMounted(async () => { try { const [productResponse, storeResponse] = await Pro
           <article class="storefront-detail-copy">
             <span v-if="product.category" class="storefront-eyebrow">{{ product.category.name }}</span><h1>{{ product.name }}</h1>
             <div class="storefront-price"><strong>{{ money(displayPrice, product.currency) }}</strong><del v-if="product.compare_at_price_minor && !selectedVariant">{{ money(product.compare_at_price_minor, product.currency) }}</del></div>
+            <div class="storefront-detail-actions"><button type="button" class="storefront-wishlist" :class="{ 'is-favorite': isFavorite }" :aria-label="isFavorite ? `Remove ${product.name} from favourites` : `Add ${product.name} to favourites`" :aria-pressed="isFavorite" @click="toggleFavorite"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M20.84 8.74c0 5.42-8.84 10.26-8.84 10.26S3.16 14.16 3.16 8.74A4.74 4.74 0 0 1 12 6.46a4.74 4.74 0 0 1 8.84 2.28Z" :fill="isFavorite ? 'currentColor' : 'none'" /></svg></button><span style="align-self:center;color:var(--muted);font-size:10px">{{ isFavorite ? 'Saved to favourites' : 'Save for later' }}</span></div>
             <div v-if="optionGroups.length" class="storefront-options"><div v-for="group in optionGroups" :key="group.public_id" class="storefront-option-group"><div class="storefront-option-heading"><strong>{{ group.name }}</strong><span>{{ group.values.find(value => value.public_id === selectedOptions[group.public_id])?.name }}</span></div><div class="storefront-option-values"><button v-for="value in group.values" :key="value.public_id" type="button" :class="{ active: selectedOptions[group.public_id] === value.public_id }" @click="setOption(group.public_id, value.public_id)">{{ value.name }}</button></div></div><p v-if="selectedVariant" class="storefront-stock" :class="{ unavailable: selectedVariant.inventory_tracking && selectedVariant.inventory_quantity <= 0 }">{{ variantStockLabel() }}</p><p v-else class="storefront-form-error">Select an option combination to continue.</p></div>
             <p v-else-if="product.inventory_tracking && product.inventory_quantity <= 0" class="storefront-stock unavailable">Not Available</p>
             <div v-if="product.description" class="storefront-description-wrap"><p class="storefront-description">{{ descriptionExpanded ? product.description : descriptionPreview }}</p><button v-if="hasLongDescription" class="storefront-read-more" type="button" :aria-expanded="descriptionExpanded" @click="descriptionExpanded = !descriptionExpanded">{{ descriptionExpanded ? 'Read less' : 'Read more' }} <span aria-hidden="true">{{ descriptionExpanded ? '↑' : '↓' }}</span></button></div>
