@@ -66,3 +66,38 @@
   gap: 9px;
   margin-top: 20px;
 }
+
+.label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.password-field {
+  position: relative;
+  display: block;
+}
+
+.password-field input {
+  padding-right: 58px;
+}
+
+.password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  min-height: 30px;
+  padding: 5px 8px;
+  transform: translateY(-50%);
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--primary);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.password-toggle:hover {
+  background: var(--soft);
+}
