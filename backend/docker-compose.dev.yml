@@ -39,10 +39,9 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import redis; redis.from_url('redis://redis:6379').ping()"]
-      interval: 30s
+      interval: 5s
       timeout: 3s
       retries: 10
-      start_period: 5s
     restart: unless-stopped
 
   redis:
