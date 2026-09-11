@@ -53,7 +53,10 @@ async def get_storefront(store_slug: str, db: AsyncSession = Depends(get_db)) ->
         (
             await db.scalars(
                 select(Product)
-                .options(selectinload(Product.media), selectinload(Product.category))
+                .options(
+                    selectinload(Product.media),
+                    selectinload(Product.category).selectinload(Category.parent),
+                )
                 .where(Product.store_id == store.id, Product.status == "active")
                 .order_by(Product.created_at.desc())
             )
@@ -89,7 +92,10 @@ async def get_storefront_product(
     store = await get_active_store(db, store_slug)
     product = await db.scalar(
         select(Product)
-        .options(selectinload(Product.media), selectinload(Product.category))
+        .options(
+            selectinload(Product.media),
+            selectinload(Product.category).selectinload(Category.parent),
+        )
         .where(
             Product.store_id == store.id,
             Product.slug == product_slug,
