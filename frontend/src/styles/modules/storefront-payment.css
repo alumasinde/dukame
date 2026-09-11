@@ -1,0 +1,24 @@
+.storefront-payment-section { margin-top: 18px; padding-top: 18px; border-top: 1px solid #e7eeec; }
+.storefront-payment-heading { display: flex; flex-direction: column; gap: 3px; margin-bottom: 10px; }
+.storefront-payment-heading strong { font-size: 13px; }
+.storefront-payment-heading span { color: var(--muted); font-size: 10px; }
+.storefront-payment-options { display: grid; gap: 8px; }
+.storefront-payment-option { position: relative; display: flex; align-items: center; gap: 10px; min-height: 62px; padding: 10px 11px; border: 1px solid var(--line); border-radius: 10px; background: #fff; cursor: pointer; transition: border-color .15s ease, background .15s ease, box-shadow .15s ease; }
+.storefront-payment-option:hover { border-color: #9dd8ce; background: #fbfefd; }
+.storefront-payment-option.selected { border-color: #7bcbbd; background: #f2fbf9; box-shadow: 0 0 0 2px rgba(38,145,132,.06); }
+.storefront-payment-option input { position: absolute; opacity: 0; pointer-events: none; }
+.storefront-payment-radio { width: 18px; height: 18px; flex: 0 0 18px; border: 2px solid #b7c4c1; border-radius: 50%; display: grid; place-items: center; }
+.storefront-payment-option.selected .storefront-payment-radio { border-color: var(--primary); }
+.storefront-payment-option.selected .storefront-payment-radio::after { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--primary); }
+.storefront-payment-copy { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.storefront-payment-copy strong { font-size: 11px; }
+.storefront-payment-copy small { color: #687873; font-size: 9px; line-height: 1.4; }
+.storefront-payment-tag { margin-left: auto; flex: 0 0 auto; padding: 4px 7px; border-radius: 999px; background: #dff5ef; color: var(--primary); font-size: 8px; font-weight: 800; }
+.storefront-payment-loading { padding: 12px; border-radius: 9px; background: #f4f7f6; color: var(--muted); font-size: 10px; }
+.storefront-payment-legal { margin: 8px 0 0; color: #8a9793; font-size: 9px; line-height: 1.5; text-align: center; }
+.storefront-payment-result { width: min(560px, 100%); margin: 18px auto 0; padding: 14px 16px; border: 1px solid #cfe5df; border-radius: 11px; background: #f4fbf9; text-align: left; }
+.storefront-payment-result strong { display: block; margin-bottom: 4px; color: var(--primary); font-size: 12px; }
+.storefront-payment-result p { margin: 0; color: #52645f; font-size: 11px; line-height: 1.6; }
+.storefront-payment-result button { margin-top: 9px; border: 0; background: transparent; color: var(--primary); font-size: 10px; font-weight: 800; cursor: pointer; }
+.storefront-payment-result.is-failed { border-color: #ead2cf; background: #fff8f7; }
+.storefront-payment-result.is-failed strong { color: #9c5148; }
