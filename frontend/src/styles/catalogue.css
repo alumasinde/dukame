@@ -1,0 +1,17 @@
+.option-list { display: grid; gap: 14px; }
+.option-card { border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 18px; background: #fff; }
+.option-heading { display: flex; align-items: center; justify-content: space-between; gap: 15px; }
+.option-heading > div:first-child { display: flex; flex-direction: column; gap: 4px; }
+.option-heading strong { font-size: 14px; }
+.option-heading small { color: var(--muted); font-size: 11px; }
+.value-list { display: flex; flex-wrap: wrap; gap: 8px; margin: 15px 0; min-height: 28px; align-items: center; }
+.value-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 8px 6px 10px; border-radius: 999px; background: var(--soft); color: var(--body); font-size: 12px; }
+.value-chip button { border: 0; background: transparent; padding: 0 2px; color: var(--muted); font-size: 12px; }
+.value-chip button:hover { color: var(--primary); }
+.inline-form { display: grid; grid-template-columns: 1.2fr 1fr .8fr auto auto; gap: 8px; align-items: end; }
+.inline-form input, .inline-form select { width: 100%; min-height: 40px; padding: 9px 11px; border: 1px solid var(--line); border-radius: var(--radius-md); background: #fff; color: var(--ink); }
+.checkbox-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.checkbox-list .checkbox-field { display: inline-flex; flex-direction: row; align-items: center; gap: 7px; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius-md); background: #fff; font-size: 12px; font-weight: 600; }
+.checkbox-list input { width: auto; min-height: auto; }
+@media (max-width: 900px) { .inline-form { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 560px) { .option-heading { align-items: flex-start; flex-direction: column; } .inline-form { grid-template-columns: 1fr; } }
