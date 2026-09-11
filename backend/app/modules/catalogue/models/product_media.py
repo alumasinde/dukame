@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -24,7 +24,7 @@ class ProductMedia(Base):
     product: Mapped["Product"] = relationship(back_populates="media")
 
     __table_args__ = (
-        UniqueConstraint("product_id", "sort_order", name="uq_product_media_product_sort"),
         Index("ix_product_media_store_product", "store_id", "product_id"),
+        Index("ix_product_media_product_sort", "product_id", "sort_order"),
         Index("ix_product_media_product_status", "product_id", "status"),
     )
