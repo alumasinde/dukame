@@ -17,6 +17,35 @@ class CheckoutRequest(BaseModel):
     phone: str = Field(min_length=7, max_length=32)
     email: str | None = Field(default=None, max_length=320)
     notes: str | None = Field(default=None, max_length=1000)
+    payment_method_public_id: str | None = Field(default=None, min_length=1, max_length=32)
+
+
+class PaymentMethodResponse(BaseModel):
+    public_id: str
+    code: str
+    name: str
+    instructions: str | None = None
+    callback_url: str | None = None
+    callback_token: str | None = None
+
+
+class PaymentMethodCreate(BaseModel):
+    code: str = Field(min_length=2, max_length=32)
+    name: str = Field(min_length=2, max_length=100)
+    instructions: str | None = Field(default=None, max_length=2000)
+    is_enabled: bool = True
+    config: dict[str, str] | None = None
+
+
+class PaymentResponse(BaseModel):
+    public_id: str
+    status: str
+    amount_minor: int
+    currency: str
+    method: PaymentMethodResponse
+    failure_reason: str | None = None
+    paid_at: str | None = None
+    provider_reference: str | None = None
 
 
 class CartItemResponse(BaseModel):
@@ -85,6 +114,7 @@ class OrderResponse(BaseModel):
     items: list[OrderItemResponse]
     created_at: str
     tracking_url: str | None = None
+    payment: PaymentResponse | None = None
 
 
 class OrderTrackingResponse(BaseModel):
@@ -100,6 +130,7 @@ class OrderTrackingResponse(BaseModel):
     created_at: str
     updated_at: str
     tracking_url: str
+    payment: PaymentResponse | None = None
 
 
 class OrderStatusUpdate(BaseModel):
