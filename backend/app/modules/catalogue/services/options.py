@@ -61,7 +61,7 @@ class OptionService:
         await self.db.commit()
 
     async def add_value(self, user: User, tenant_public_id: str, option_public_id: str, payload: OptionValueCreate):
-        store = await resolve_store(self.db, tenant_public_id, "catalogue.manage")
+        store = await resolve_store(self.db, user, tenant_public_id, "catalogue.manage")
         option = await self.options.get(store.id, option_public_id)
         if option is None:
             raise HTTPException(status_code=404, detail="Option not found")
