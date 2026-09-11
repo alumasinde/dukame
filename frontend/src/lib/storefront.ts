@@ -1,7 +1,12 @@
 import axios from 'axios'
 
 export interface StorefrontMedia { url: string; alt_text: string | null }
-export interface StorefrontCategory { public_id: string; name: string; slug: string }
+export interface StorefrontCategory {
+  public_id: string
+  name: string
+  slug: string
+  parent_public_id: string | null
+}
 export interface StorefrontProduct {
   public_id: string
   name: string
