@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.time import utc_now
 from app.modules.auth.models.identity import User
+from app.modules.catalogue.models.store import Store
 from app.modules.rbac.models.rbac import Permission, TenantRole, TenantRolePermission
 from app.modules.subscriptions.models.subscription import Plan, Subscription, SubscriptionEvent
 from app.modules.tenancy.models.tenant import Tenant, TenantUser
@@ -25,7 +26,8 @@ DEFAULT_ROLE_PERMISSIONS = {
 
 
 def slugify(value: str) -> str:
-    return re.sub(r"[^a-z0-9]", "", value.strip().lower())[:100]
+    value = re.sub(r"[^a-z0-9]+", "-", value.strip().lower())
+    return value.strip("-")[:100]
 
 
 async def ensure_default_roles(db: AsyncSession, tenant_id: int) -> TenantRole:
@@ -51,15 +53,29 @@ async def ensure_default_roles(db: AsyncSession, tenant_id: int) -> TenantRole:
 async def create_tenant(db: AsyncSession, user: User, name: str, slug: str | None) -> tuple[Tenant, Subscription]:
     tenant_slug = slugify(slug or name)
     if len(tenant_slug) < 3:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="A valid shop name or slug is required")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="A valid business name or link is required")
     if await db.scalar(select(Tenant).where(Tenant.slug == tenant_slug)):
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Shop slug is already in use")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="This business link is already in use")
     plan = cast(Plan | None, await db.scalar(select(Plan).where(Plan.slug == settings.default_plan_slug, Plan.is_active.is_(True))))
     if plan is None:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Default subscription plan is unavailable")
-    tenant = Tenant(public_id=uuid.uuid4().hex, name=name.strip(), slug=tenant_slug)
+
+    business_name = name.strip()
+    tenant = Tenant(public_id=uuid.uuid4().hex, name=business_name, slug=tenant_slug)
     db.add(tenant)
     await db.flush()
+
+    store = Store(
+        public_id=uuid.uuid4().hex,
+        tenant_id=tenant.id,
+        name=business_name,
+        slug=tenant_slug,
+        status="active",
+        currency="KES",
+    )
+    db.add(store)
+    await db.flush()
+
     owner_role = await ensure_default_roles(db, tenant.id)
     db.add(TenantUser(tenant_id=tenant.id, user_id=user.id, role="owner", role_id=owner_role.id, status="active"))
     start = utc_now()
@@ -72,7 +88,7 @@ async def create_tenant(db: AsyncSession, user: User, name: str, slug: str | Non
         await db.commit()
     except IntegrityError as exc:
         await db.rollback()
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Shop details are already in use") from exc
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Business details are already in use") from exc
     await db.refresh(tenant)
     await db.refresh(subscription)
     return tenant, subscription
