@@ -6,6 +6,7 @@ export interface Product { public_id: string; name: string; slug: string; descri
 export interface ProductOptionValue { public_id: string; name: string; slug: string; status: string; sort_order: number }
 export interface ProductOption { public_id: string; name: string; slug: string; status: string; sort_order: number; values: ProductOptionValue[] }
 export interface ProductVariant { public_id: string; sku: string | null; price_minor: number | null; compare_at_price_minor: number | null; inventory_tracking: boolean; inventory_quantity: number; status: string; option_value_public_ids: string[] }
+export interface ProductMedia { public_id: string; url: string; alt_text: string | null; media_type: string; sort_order: number; status: string }
 
 export const catalogueApi = {
   getStore(tenantId: string) { return api.get<Store>(`/tenants/${tenantId}/store`) },
@@ -29,4 +30,8 @@ export const catalogueApi = {
   createVariant(tenantId: string, productId: string, payload: Record<string, unknown>) { return api.post<ProductVariant>(`/tenants/${tenantId}/products/${productId}/variants`, payload) },
   updateVariant(tenantId: string, productId: string, variantId: string, payload: Record<string, unknown>) { return api.put<ProductVariant>(`/tenants/${tenantId}/products/${productId}/variants/${variantId}`, payload) },
   deleteVariant(tenantId: string, productId: string, variantId: string) { return api.delete(`/tenants/${tenantId}/products/${productId}/variants/${variantId}`) },
+  listMedia(tenantId: string, productId: string) { return api.get<ProductMedia[]>(`/tenants/${tenantId}/products/${productId}/media`) },
+  createMedia(tenantId: string, productId: string, payload: Record<string, unknown>) { return api.post<ProductMedia>(`/tenants/${tenantId}/products/${productId}/media`, payload) },
+  updateMedia(tenantId: string, productId: string, mediaId: string, payload: Record<string, unknown>) { return api.put<ProductMedia>(`/tenants/${tenantId}/products/${productId}/media/${mediaId}`, payload) },
+  deleteMedia(tenantId: string, productId: string, mediaId: string) { return api.delete(`/tenants/${tenantId}/products/${productId}/media/${mediaId}`) },
 }
