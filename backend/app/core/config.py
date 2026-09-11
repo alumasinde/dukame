@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     database_url: MySQLDsn = Field(alias="DATABASE_URL")
     redis_url: RedisDsn = Field(alias="REDIS_URL")
     jwt_secret: SecretStr = Field(alias="JWT_SECRET")
+    tracking_secret: SecretStr | None = None
     jwt_algorithm: str = "HS256"
     database_pool_size: int = Field(default=10, ge=1, le=100)
     database_max_overflow: int = Field(default=20, ge=0, le=200)
@@ -52,6 +53,10 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.environment == "production"
+
+    @property
+    def tracking_signing_key(self) -> str:
+        return (self.tracking_secret or self.jwt_secret).get_secret_value()
 
 
 @lru_cache
