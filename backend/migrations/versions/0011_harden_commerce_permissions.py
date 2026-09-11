@@ -13,27 +13,146 @@ down_revision = "0010_carts_orders"
 branch_labels = None
 depends_on = None
 
-PERMISSIONS = (("orders.status.manage", "Change order status"),)
+PERMISSION_KEY = "orders.status.manage"
 
 
 def upgrade() -> None:
+    bind = op.get_bind()
+
     permission_table = sa.table(
         "permissions",
-        sa.column("public_id", sa.String),
-        sa.column("key", sa.String),
-        sa.column("name", sa.String),
+        sa.column("id", sa.BigInteger),
+        sa.column("public_id", sa.String(32)),
+        sa.column("key", sa.String(150)),
+        sa.column("name", sa.String(150)),
     )
-    op.bulk_insert(permission_table, [{"public_id": uuid.uuid4().hex, "key": key, "name": name} for key, name in PERMISSIONS])
-    bind = op.get_bind()
-    bind.execute(sa.text("DELETE FROM tenant_role_permissions WHERE permission_id IN (SELECT id FROM permissions WHERE key = 'orders.manage')"))
-    bind.execute(sa.text("INSERT INTO tenant_role_permissions (role_id, permission_id) SELECT tr.id, p.id FROM tenant_roles tr CROSS JOIN permissions p WHERE tr.slug IN ('owner', 'admin', 'manager') AND p.key = 'orders.status.manage'"))
-    bind.execute(sa.text("INSERT INTO tenant_role_permissions (role_id, permission_id) SELECT tr.id, p.id FROM tenant_roles tr CROSS JOIN permissions p WHERE tr.slug = 'staff' AND p.key = 'orders.read' AND NOT EXISTS (SELECT 1 FROM tenant_role_permissions trp WHERE trp.role_id = tr.id AND trp.permission_id = p.id)"))
-    bind.execute(sa.text("DELETE FROM permissions WHERE key = 'orders.manage'"))
+
+    existing = bind.execute(
+        sa.select(permission_table.c.id).where(permission_table.c.key == PERMISSION_KEY)
+    ).first()
+    if existing is None:
+        op.bulk_insert(
+            permission_table,
+            [{
+                "public_id": uuid.uuid4().hex,
+                "key": PERMISSION_KEY,
+                "name": "Change order status",
+            }],
+        )
+
+    permission_id = bind.execute(
+        sa.select(permission_table.c.id).where(permission_table.c.key == PERMISSION_KEY)
+    ).scalar_one()
+
+    bind.execute(
+        sa.text(
+            "DELETE FROM tenant_role_permissions "
+            "WHERE permission_id = :permission_id"
+        ),
+        {"permission_id": permission_id},
+    )
+
+    bind.execute(
+        sa.text(
+            "INSERT INTO tenant_role_permissions (role_id, permission_id) "
+            "SELECT tr.id, :permission_id FROM tenant_roles AS tr "
+            "WHERE tr.slug IN ('owner', 'admin', 'manager') "
+            "AND NOT EXISTS ("
+            "SELECT 1 FROM tenant_role_permissions AS existing "
+            "WHERE existing.role_id = tr.id "
+            "AND existing.permission_id = :permission_id"
+            ")"
+        ),
+        {"permission_id": permission_id},
+    )
+
+    orders_manage_id = bind.execute(
+        sa.select(permission_table.c.id).where(permission_table.c.key == "orders.manage")
+    ).scalar()
+    if orders_manage_id is not None:
+        bind.execute(
+            sa.text(
+                "DELETE FROM tenant_role_permissions "
+                "WHERE permission_id = :permission_id"
+            ),
+            {"permission_id": orders_manage_id},
+        )
+        bind.execute(
+            sa.text("DELETE FROM permissions WHERE id = :permission_id"),
+            {"permission_id": orders_manage_id},
+        )
+
+    orders_read_id = bind.execute(
+        sa.select(permission_table.c.id).where(permission_table.c.key == "orders.read")
+    ).scalar()
+    if orders_read_id is not None:
+        bind.execute(
+            sa.text(
+                "INSERT INTO tenant_role_permissions (role_id, permission_id) "
+                "SELECT tr.id, :permission_id FROM tenant_roles AS tr "
+                "WHERE tr.slug = 'staff' "
+                "AND NOT EXISTS ("
+                "SELECT 1 FROM tenant_role_permissions AS existing "
+                "WHERE existing.role_id = tr.id "
+                "AND existing.permission_id = :permission_id"
+                ")"
+            ),
+            {"permission_id": orders_read_id},
+        )
 
 
 def downgrade() -> None:
     bind = op.get_bind()
-    bind.execute(sa.text("DELETE FROM tenant_role_permissions WHERE permission_id IN (SELECT id FROM permissions WHERE key = 'orders.status.manage')"))
-    bind.execute(sa.text("DELETE FROM permissions WHERE key = 'orders.status.manage'"))
-    bind.execute(sa.text("INSERT INTO permissions (public_id, key, name) VALUES (:public_id, 'orders.manage', 'Manage orders')"), {"public_id": uuid.uuid4().hex})
-    bind.execute(sa.text("INSERT INTO tenant_role_permissions (role_id, permission_id) SELECT tr.id, p.id FROM tenant_roles tr CROSS JOIN permissions p WHERE tr.slug IN ('owner', 'admin') AND p.key = 'orders.manage'"))
+    permission_table = sa.table(
+        "permissions",
+        sa.column("id", sa.BigInteger),
+        sa.column("public_id", sa.String(32)),
+        sa.column("key", sa.String(150)),
+        sa.column("name", sa.String(150)),
+    )
+
+    permission_id = bind.execute(
+        sa.select(permission_table.c.id).where(permission_table.c.key == PERMISSION_KEY)
+    ).scalar()
+    if permission_id is not None:
+        bind.execute(
+            sa.text(
+                "DELETE FROM tenant_role_permissions "
+                "WHERE permission_id = :permission_id"
+            ),
+            {"permission_id": permission_id},
+        )
+        bind.execute(
+            sa.text("DELETE FROM permissions WHERE id = :permission_id"),
+            {"permission_id": permission_id},
+        )
+
+    orders_manage_id = bind.execute(
+        sa.select(permission_table.c.id).where(permission_table.c.key == "orders.manage")
+    ).scalar()
+    if orders_manage_id is None:
+        op.bulk_insert(
+            permission_table,
+            [{
+                "public_id": uuid.uuid4().hex,
+                "key": "orders.manage",
+                "name": "Manage orders",
+            }],
+        )
+        orders_manage_id = bind.execute(
+            sa.select(permission_table.c.id).where(permission_table.c.key == "orders.manage")
+        ).scalar_one()
+
+    bind.execute(
+        sa.text(
+            "INSERT INTO tenant_role_permissions (role_id, permission_id) "
+            "SELECT tr.id, :permission_id FROM tenant_roles AS tr "
+            "WHERE tr.slug IN ('owner', 'admin') "
+            "AND NOT EXISTS ("
+            "SELECT 1 FROM tenant_role_permissions AS existing "
+            "WHERE existing.role_id = tr.id "
+            "AND existing.permission_id = :permission_id"
+            ")"
+        ),
+        {"permission_id": orders_manage_id},
+    )
