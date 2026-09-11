@@ -25,6 +25,7 @@ class PaymentMethodResponse(BaseModel):
     code: str
     name: str
     is_enabled: bool = True
+    payment_type: str | None = None
     instructions: str | None = None
     callback_url: str | None = None
     callback_token: str | None = None
