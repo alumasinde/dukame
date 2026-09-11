@@ -1,0 +1,60 @@
+.app-layout {
+  min-height: 100vh;
+  background: var(--page-background);
+}
+
+.main-content {
+  min-width: 0;
+  min-height: 100vh;
+  width: auto;
+  margin-left: var(--sidebar-width);
+  display: flex;
+  flex-direction: column;
+}
+
+.page-content {
+  width: 100%;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 28px 32px 60px;
+}
+
+.page-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.welcome-row,
+.section-intro {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.welcome-row h2,
+.section-intro h2 {
+  margin: 5px 0 6px;
+  font-size: 29px;
+  line-height: 1.12;
+  letter-spacing: -.035em;
+}
+
+.lead {
+  color: var(--muted);
+  margin: 0;
+  max-width: 680px;
+  line-height: 1.55;
+  font-size: 14px;
+}
+
+.eyebrow {
+  display: inline-block;
+  font-size: 10px;
+  line-height: 1;
+  letter-spacing: .11em;
+  text-transform: uppercase;
+  color: #748681;
+  font-weight: 800;
+}
