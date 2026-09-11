@@ -93,9 +93,12 @@ async function addToCart() {
 
 onMounted(async () => {
   try {
-    const response = await getStorefrontProduct(storeSlug, String(route.params.productSlug))
-    product.value = response.data
-    document.title = response.data.name
+    const [productResponse] = await Promise.all([
+      getStorefrontProduct(storeSlug, String(route.params.productSlug)),
+      cartState.load(storeSlug),
+    ])
+    product.value = productResponse.data
+    document.title = productResponse.data.name
     for (const group of optionGroups.value) selectedOptions[group.public_id] = group.values[0]?.public_id || ''
   } catch (err: any) {
     error.value = err?.response?.data?.detail || 'This product could not be found.'
