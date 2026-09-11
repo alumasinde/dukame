@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.modules.auth.models.identity import User
 from app.modules.auth.security import get_current_user
-from app.modules.rbac.models.rbac import Permission, TenantRole
+from app.modules.rbac.models.rbac import Permission
 from app.modules.rbac.schemas.rbac import CreateRoleRequest, PermissionResponse, TenantRoleResponse, UpdateRolePermissionsRequest
 from app.modules.rbac.services.rbac import create_custom_role, get_role, list_roles, replace_role_permissions, role_permissions, require_permission
 from app.modules.tenancy.models.tenant import Tenant
