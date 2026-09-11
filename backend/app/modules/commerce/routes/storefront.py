@@ -40,11 +40,12 @@ def empty_cart(currency: str) -> CartResponse:
     return CartResponse(public_id="", currency=currency, items=[], item_count=0, subtotal_minor=0)
 
 
-def order_response(order, include_tracking: bool = False, store_slug: str | None = None) -> OrderResponse:
+def order_response(order, include_tracking: bool = False, store_slug: str | None = None, store_name: str | None = None) -> OrderResponse:
     return OrderResponse(
         public_id=order.public_id,
         order_number=order.order_number,
         status=OrderStatusResponse(public_id=order.status.public_id, code=order.status.code, name=order.status.name, description=order.status.description, sort_order=order.status.sort_order, is_terminal=order.status.is_terminal),
+        store_name=store_name,
         customer_first_name=order.customer_first_name,
         customer_last_name=order.customer_last_name,
         customer_email=order.customer_email,
@@ -129,7 +130,7 @@ async def checkout(store_slug: str, payload: CheckoutRequest, response: Response
         raise HTTPException(status_code=422, detail="Your cart is empty")
     order = await CommerceService(db).checkout(store, dukame_cart, payload)
     response.delete_cookie("dukame_cart", path=f"/api/v1/storefront/{store.slug}")
-    return order_response(order, include_tracking=True, store_slug=store.slug)
+    return order_response(order, include_tracking=True, store_slug=store.slug, store_name=store.name)
 
 
 @router.get("/{store_slug}/order/track/{tracking_token_value}", response_model=OrderTrackingResponse)
