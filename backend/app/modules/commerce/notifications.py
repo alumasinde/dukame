@@ -25,17 +25,15 @@ def normalize_phone(value: str) -> str:
     return phone
 
 
-def status_message(order: Order, status: OrderStatus, url: str) -> str:
-    return (
-        f"{order.store.name}: Order #{order.order_number} is now {status.name}. "
-        f"Track your order: {url}"
-    )
+def status_message(store_name: str, order: Order, status: OrderStatus, url: str) -> str:
+    return f"{store_name}: Order #{order.order_number} is now {status.name}. Track your order: {url}"
 
 
 async def queue_order_sms(
     db: AsyncSession,
     order: Order,
     status: OrderStatus,
+    store_name: str,
     store_slug: str,
 ) -> None:
     if settings.sms_provider == "none":
@@ -60,7 +58,7 @@ async def queue_order_sms(
             status_id=status.id,
             channel="sms",
             recipient=recipient,
-            message=status_message(order, status, url),
+            message=status_message(store_name, order, status, url),
             tracking_url=url,
         )
     )
@@ -72,7 +70,7 @@ async def send_sms(notification: OrderNotification) -> str | None:
     if settings.sms_api_key is None or not settings.sms_username:
         raise RuntimeError("Africa's Talking SMS credentials are not configured")
 
-    data = {
+    data: dict[str, str] = {
         "username": settings.sms_username,
         "to": notification.recipient,
         "message": notification.message,
