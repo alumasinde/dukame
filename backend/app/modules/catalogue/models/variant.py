@@ -11,6 +11,7 @@ class ProductVariant(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     public_id: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
+    store_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("stores.id", ondelete="CASCADE"), nullable=False)
     product_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
     sku: Mapped[str | None] = mapped_column(String(100))
     price_minor: Mapped[int | None] = mapped_column(Integer)
@@ -25,6 +26,7 @@ class ProductVariant(Base):
     option_value_links: Mapped[list["ProductVariantOptionValue"]] = relationship(back_populates="variant", cascade="all, delete-orphan")
 
     __table_args__ = (
-        UniqueConstraint("product_id", "sku", name="uq_product_variants_product_sku"),
+        UniqueConstraint("store_id", "sku", name="uq_product_variants_store_sku"),
         Index("ix_product_variants_product_status", "product_id", "status"),
+        Index("ix_product_variants_store", "store_id"),
     )
