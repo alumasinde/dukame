@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -14,6 +16,7 @@ class StorefrontCategory(BaseModel):
     public_id: str
     name: str
     slug: str
+    description: str | None = None
     parent_public_id: str | None = None
 
 
@@ -43,6 +46,7 @@ class StorefrontProduct(BaseModel):
     currency: str
     inventory_tracking: bool
     inventory_quantity: int
+    created_at: datetime | None = None
     category: StorefrontCategory | None
     media: list[StorefrontMedia] = Field(default_factory=list)
     variants: list[StorefrontVariant] = Field(default_factory=list)
