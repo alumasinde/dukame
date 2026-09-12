@@ -5,6 +5,7 @@ export interface StorefrontCategory {
   public_id: string
   name: string
   slug: string
+  description?: string | null
   parent_public_id: string | null
 }
 export interface StorefrontVariantOption {
@@ -31,6 +32,7 @@ export interface StorefrontProduct {
   currency: string
   inventory_tracking: boolean
   inventory_quantity: number
+  created_at?: string | null
   category: StorefrontCategory | null
   media: StorefrontMedia[]
   variants: StorefrontVariant[]
@@ -69,4 +71,25 @@ export function getStorefront(slug: string, params?: StorefrontQuery) {
 
 export function getStorefrontProduct(storeSlug: string, productSlug: string) {
   return storefrontApi.get<StorefrontProduct>(`/storefront/${encodeURIComponent(storeSlug)}/products/${encodeURIComponent(productSlug)}`)
+}
+
+/** Products marked New if created within the last N days. */
+export function isNewProduct(product: StorefrontProduct, days = 14): boolean {
+  if (!product.created_at) return false
+  const created = new Date(product.created_at).getTime()
+  if (Number.isNaN(created)) return false
+  return Date.now() - created < days * 24 * 60 * 60 * 1000
+}
+
+export function relatedProducts(
+  all: StorefrontProduct[],
+  current: StorefrontProduct,
+  limit = 4,
+): StorefrontProduct[] {
+  const others = all.filter((p) => p.public_id !== current.public_id)
+  const sameCat = current.category
+    ? others.filter((p) => p.category?.public_id === current.category?.public_id)
+    : []
+  const pool = sameCat.length >= 2 ? sameCat : others
+  return pool.slice(0, limit)
 }

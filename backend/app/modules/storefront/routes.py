@@ -17,6 +17,18 @@ router = APIRouter(prefix="/storefront", tags=["storefront"])
 SORT_OPTIONS = {"featured", "price_asc", "price_desc", "newest"}
 
 
+def category_payload(category: Category | None) -> dict | None:
+    if category is None:
+        return None
+    return {
+        "public_id": category.public_id,
+        "name": category.name,
+        "slug": category.slug,
+        "description": category.description,
+        "parent_public_id": category.parent.public_id if category.parent else None,
+    }
+
+
 def product_response(product: Product, include_variants: bool = False) -> StorefrontProductResponse:
     variants = []
     if include_variants:
@@ -51,16 +63,8 @@ def product_response(product: Product, include_variants: bool = False) -> Storef
         currency=product.currency,
         inventory_tracking=product.inventory_tracking,
         inventory_quantity=product.inventory_quantity,
-        category=(
-            {
-                "public_id": product.category.public_id,
-                "name": product.category.name,
-                "slug": product.category.slug,
-                "parent_public_id": product.category.parent_id and product.category.parent.public_id,
-            }
-            if product.category
-            else None
-        ),
+        created_at=product.created_at,
+        category=category_payload(product.category),
         media=[
             {"url": item.url, "alt_text": item.alt_text}
             for item in product.media
@@ -101,7 +105,6 @@ async def get_storefront(
             )
         )
 
-    category_ids: list[int] | None = None
     if category and category.strip():
         cat = await db.scalar(
             select(Category).where(
@@ -128,18 +131,14 @@ async def get_storefront(
                     ids.extend(collect(child.id))
                 return ids
 
-            category_ids = collect(cat.id)
-            filters.append(Product.category_id.in_(category_ids))
+            filters.append(Product.category_id.in_(collect(cat.id)))
 
     total = await db.scalar(select(func.count()).select_from(Product).where(*filters)) or 0
 
-    order_clause = Product.created_at.desc()
     if sort_key == "price_asc":
         order_clause = asc(Product.price_minor)
     elif sort_key == "price_desc":
         order_clause = desc(Product.price_minor)
-    elif sort_key == "newest":
-        order_clause = desc(Product.created_at)
     else:
         order_clause = desc(Product.created_at)
 
@@ -175,6 +174,7 @@ async def get_storefront(
                 "public_id": item.public_id,
                 "name": item.name,
                 "slug": item.slug,
+                "description": item.description,
                 "parent_public_id": item.parent.public_id if item.parent else None,
             }
             for item in categories

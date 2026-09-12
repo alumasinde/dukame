@@ -3,14 +3,15 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import { addCartItem } from '../lib/cart'
 import { useCartState } from '../lib/cart-state'
-import { isFavorite as checkFavorite, loadFavorites, toggleFavorite as toggleFavoriteStore } from '../lib/favorites'
+import { isFavorite as checkFavorite, toggleFavorite as toggleFavoriteStore } from '../lib/favorites'
 import { productShareText, shareContent, whatsappShareUrl } from '../lib/share'
-import { getStorefront, getStorefrontProduct, type StorefrontProduct } from '../lib/storefront'
+import { getStorefront, getStorefrontProduct, isNewProduct, relatedProducts, type StorefrontProduct } from '../lib/storefront'
 
 const route = useRoute()
 const cartState = useCartState()
 const storeSlug = String(route.params.storeSlug)
 const product = ref<StorefrontProduct | null>(null)
+const catalog = ref<StorefrontProduct[]>([])
 const storeName = ref('')
 const storeCurrency = ref('KES')
 const loading = ref(true)
@@ -39,6 +40,8 @@ const waShare = computed(() => {
   if (!product.value) return ''
   return whatsappShareUrl(productShareText(product.value.name, priceLabel.value, productUrl.value))
 })
+const related = computed(() => product.value ? relatedProducts(catalog.value, product.value, 4) : [])
+const showNew = computed(() => product.value ? isNewProduct(product.value) : false)
 
 function money(minor: number, currency: string) { return new Intl.NumberFormat('en-KE', { style: 'currency', currency, maximumFractionDigits: 2 }).format(minor / 100) }
 function setOption(optionId: string, valueId: string) { selectedOptions[optionId] = valueId; added.value = false; error.value = '' }
@@ -75,6 +78,7 @@ onMounted(async () => {
       cartState.load(storeSlug),
     ])
     product.value = productResponse.data
+    catalog.value = storeResponse.data.products || []
     storeName.value = storeResponse.data.name
     storeCurrency.value = storeResponse.data.currency
     document.title = `${product.value.name} · ${storeName.value}`
@@ -99,8 +103,8 @@ onMounted(async () => {
           <div><strong>{{ storeName || 'Your store' }}</strong><small>Powered by DukaMe</small></div>
         </RouterLink>
         <div class="storefront-header-actions">
-          <RouterLink :to="`/${storeSlug}/favourites`" class="storefront-header-link storefront-fav-badge" aria-label="Favourites">♥</RouterLink>
-          <RouterLink :to="`/${storeSlug}/cart`" class="storefront-header-link">
+          <RouterLink :to="`/${storeSlug}/favourites" class="storefront-header-link storefront-fav-badge" aria-label="Favourites">♥</RouterLink>
+          <RouterLink :to="`/${storeSlug}/cart" class="storefront-header-link">
             <span class="storefront-cart-label">Cart</span>
             <span v-if="cartState.itemCount.value">{{ cartState.itemCount.value }}</span>
           </RouterLink>
@@ -113,6 +117,7 @@ onMounted(async () => {
             <div class="storefront-main-image" :class="{ 'storefront-image-unavailable': simpleProductUnavailable }">
               <img v-if="product.media[selectedImage]" :src="product.media[selectedImage].url" :alt="product.media[selectedImage].alt_text || product.name" />
               <span v-else>No image</span>
+              <span v-if="showNew" class="storefront-new-badge">New</span>
               <span v-if="simpleProductUnavailable" class="storefront-unavailable-badge">Not Available</span>
             </div>
             <div v-if="product.media.length > 1" class="storefront-thumbs">
@@ -166,6 +171,21 @@ onMounted(async () => {
             </div>
             <RouterLink v-if="added" :to="`/${storeSlug}/cart`" class="storefront-go-cart">View cart · {{ cartState.itemCount.value }} {{ cartState.itemCount.value === 1 ? 'item' : 'items' }} →</RouterLink>
           </article>
+        </div>
+      </section>
+
+      <section v-if="related.length" class="storefront-related">
+        <h2>You may also like</h2>
+        <div class="storefront-related-grid">
+          <RouterLink v-for="item in related" :key="item.public_id" :to="`/${storeSlug}/products/${item.slug}`" class="storefront-related-card">
+            <div class="img">
+              <img v-if="item.media[0]" :src="item.media[0].url" :alt="item.name" loading="lazy" />
+            </div>
+            <div class="copy">
+              <strong>{{ item.name }}</strong>
+              <span>{{ money(item.price_minor, item.currency) }}</span>
+            </div>
+          </RouterLink>
         </div>
       </section>
 
