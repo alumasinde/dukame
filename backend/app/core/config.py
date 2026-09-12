@@ -45,6 +45,9 @@ class Settings(BaseSettings):
     sms_api_url: str = "https://api.africastalking.com/version1/messaging"
     notification_poll_seconds: float = Field(default=2.0, ge=1.0, le=60.0)
     notification_max_attempts: int = Field(default=5, ge=1, le=20)
+    notification_lease_seconds: int = Field(default=60, ge=30, le=600)
+    notification_max_backoff_seconds: int = Field(default=300, ge=5, le=86400)
+    notification_worker_id: str = Field(default_factory=lambda: secrets.token_hex(16), min_length=1, max_length=64)
 
     @field_validator("environment")
     @classmethod
