@@ -6,11 +6,29 @@ on:
   pull_request:
 
 jobs:
-  backend:
+  # 🔎 JOB 1: Detect what files actually changed in this commit/PR
+  changes:
     runs-on: ubuntu-latest
-    # ⚡ OPTIMIZATION: Only run backend checks if files in the backend folder change
     outputs:
-      run_backend: ${{ steps.filter.outputs.backend }}
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'backend/**'
+            frontend:
+              - 'frontend/**'
+
+  # 🐍 JOB 2: Backend Pipeline
+  backend:
+    needs: changes
+    # ⚡ Only spins up this job (and its heavy Docker services) if backend files changed
+    if: ${{ needs.changes.outputs.backend == 'true' }}
+    runs-on: ubuntu-latest
     services:
       mysql:
         image: mysql:8.4
@@ -40,82 +58,50 @@ jobs:
         working-directory: backend
     steps:
       - uses: actions/checkout@v4
-
-      # Uses path filter to detect if backend files changed
-      - uses: dorny/paths-filter@v3
-        id: filter
-        with:
-          filters: |
-            backend:
-              - 'backend/**'
-
-      - name: Setup Python
-        if: steps.filter.outputs.backend == 'true'
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-          cache: 'pip' # ⚡ OPTIMIZATION: Cache python dependencies
-          cache-dependency-path: 'backend/setup.py' # Change to pyproject.toml or requirements.txt if applicable
-
-      - name: Install dependencies
-        if: steps.filter.outputs.backend == 'true'
-        run: |
-          python -m pip install --upgrade pip
-          pip install ".[dev]"
-
+          cache: 'pip'
+          cache-dependency-path: 'backend/setup.py' # Update to pyproject.toml / requirements.txt if needed
+      - run: python -m pip install --upgrade pip
+      - run: pip install ".[dev]"
       - name: Ruff
-        if: steps.filter.outputs.backend == 'true'
         run: ruff check app migrations tests
-
       - name: Migration upgrade
-        if: steps.filter.outputs.backend == 'true'
         env:
           DATABASE_URL: mysql://dukame:dukame@127.0.0.1:3306/dukame_test
           REDIS_URL: redis://127.0.0.1:6379/0
           JWT_SECRET: ci-test-secret-change-me-2026-strong
         run: alembic upgrade head
-
       - name: Migration consistency
-        if: steps.filter.outputs.backend == 'true'
         env:
           DATABASE_URL: mysql://dukame:dukame@127.0.0.1:3306/dukame_test
           REDIS_URL: redis://127.0.0.1:6379/0
           JWT_SECRET: ci-test-secret-change-me-2026-strong
         run: alembic check
-
       - name: Tests
-        if: steps.filter.outputs.backend == 'true'
         env:
           DATABASE_URL: mysql://dukame:dukame@127.0.0.1:3306/dukame_test
           REDIS_URL: redis://127.0.0.1:6379/0
           JWT_SECRET: ci-test-secret-change-me-2026-strong
         run: pytest
-
       - name: Mypy
-        if: steps.filter.outputs.backend == 'true'
         env:
           DATABASE_URL: mysql://dukame:dukame@127.0.0.1:3306/dukame_test
           REDIS_URL: redis://127.0.0.1:6379/0
           JWT_SECRET: ci-test-secret-change-me-2026-strong
         run: mypy app/modules/customers --follow-imports=skip --disable-error-code=misc --disable-error-code=redundant-cast --disable-error-code=no-any-return
-
       - name: Production image build
-        if: steps.filter.outputs.backend == 'true'
         run: docker build -f Dockerfile -t dukame-api:ci .
-
       - name: Production compose validation
-        if: steps.filter.outputs.backend == 'true'
         run: DUKAME_ENV_FILE=.env.example docker compose -f docker-compose.prod.yml config
 
+  # ⚛️ JOB 3: Frontend Pipeline
   frontend:
+    needs: changes
+    # ⚡ Only runs if frontend files changed
+    if: ${{ needs.changes.outputs.frontend == 'true' }}
     runs-on: ubuntu-latest
-    on:
-      pull_request:
-        paths:
-          - 'frontend/**'
-      push:
-        paths:
-          - 'frontend/**'
     defaults:
       run:
         working-directory: frontend
