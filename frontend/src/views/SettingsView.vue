@@ -12,10 +12,14 @@ const tenantId = computed(() => auth.activeTenant?.public_id || '')
 const store = ref<Store | null>(null)
 const loading = ref(false)
 const saving = ref(false)
+const savingContact = ref(false)
 const error = ref('')
 const success = ref('')
+const contactSuccess = ref('')
+const contactError = ref('')
 const smsEnabled = ref(false)
 const whatsappEnabled = ref(false)
+const contactPhone = ref('')
 
 function errorMessage(err: unknown, fallback: string): string {
   const data = (err as { response?: { data?: { detail?: unknown }; headers?: Record<string, unknown> } })?.response
@@ -39,6 +43,7 @@ async function loadStore() {
     store.value = data
     smsEnabled.value = Boolean(data.sms_notifications_enabled)
     whatsappEnabled.value = Boolean(data.whatsapp_notifications_enabled)
+    contactPhone.value = data.contact_phone || ''
   } catch (err) {
     error.value = errorMessage(err, 'Could not load store notification settings.')
     store.value = null
@@ -65,6 +70,25 @@ async function saveNotifications() {
     error.value = errorMessage(err, 'Could not save notification settings.')
   } finally {
     saving.value = false
+  }
+}
+
+async function saveContactPhone() {
+  if (!tenantId.value || !store.value) return
+  savingContact.value = true
+  contactError.value = ''
+  contactSuccess.value = ''
+  try {
+    const { data } = await catalogueApi.updateStore(tenantId.value, {
+      contact_phone: contactPhone.value.trim() || null,
+    })
+    store.value = data
+    contactPhone.value = data.contact_phone || ''
+    contactSuccess.value = 'Store contact phone saved. Customers can chat on WhatsApp from your shop.'
+  } catch (err) {
+    contactError.value = errorMessage(err, 'Could not save contact phone.')
+  } finally {
+    savingContact.value = false
   }
 }
 
@@ -130,6 +154,28 @@ onMounted(() => {
           <span class="security-state">{{ user?.is_active ? 'Active' : 'Disabled' }}</span>
         </div>
       </section>
+    </section>
+
+    <section class="panel">
+      <div class="panel-heading">
+        <div>
+          <h3>Store contact</h3>
+          <p>Shown on your public shop so customers can reach you on WhatsApp.</p>
+        </div>
+      </div>
+      <p v-if="contactError" class="notifications-error">{{ contactError }}</p>
+      <p v-else-if="contactSuccess" class="notifications-success">{{ contactSuccess }}</p>
+      <div v-if="store" class="form-stack" style="max-width: 420px">
+        <label>
+          Public WhatsApp / contact phone
+          <input v-model="contactPhone" type="tel" placeholder="07XX XXX XXX" autocomplete="tel" />
+        </label>
+        <p class="muted" style="margin: 0; font-size: 11px; line-height: 1.5">Kenyan mobile number recommended. Leave blank to hide the WhatsApp button on your storefront.</p>
+        <button class="button button-primary" type="button" :disabled="savingContact" @click="saveContactPhone">
+          {{ savingContact ? 'Saving…' : 'Save contact phone' }}
+        </button>
+      </div>
+      <p v-else-if="!loading" class="notifications-hint">Load your store to set a public contact number.</p>
     </section>
 
     <section class="panel notifications-panel">
