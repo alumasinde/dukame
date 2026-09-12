@@ -9,6 +9,7 @@ from app.modules.catalogue.repositories.category import CategoryRepository
 from app.modules.catalogue.repositories.product import ProductRepository
 from app.modules.catalogue.schemas.product import ProductCreate, ProductUpdate
 from app.modules.catalogue.services.context import resolve_store
+from app.modules.commerce.models.inventory_movement import InventoryMovement
 
 
 class ProductService:
@@ -44,6 +45,20 @@ class ProductService:
             raise HTTPException(status_code=409, detail="Product SKU already exists")
         try:
             product = await self.repository.create(public_id=uuid.uuid4().hex, store_id=store.id, category_id=category_id, **payload.model_dump(exclude={"category_public_id"}))
+            if payload.inventory_tracking and payload.inventory_quantity > 0:
+                self.db.add(
+                    InventoryMovement(
+                        public_id=uuid.uuid4().hex,
+                        store_id=store.id,
+                        product_id=product.id,
+                        movement_type="restock",
+                        quantity=payload.inventory_quantity,
+                        quantity_before=0,
+                        quantity_after=payload.inventory_quantity,
+                        reason="Initial stock",
+                        actor_user_id=user.id,
+                    )
+                )
             await self.db.commit()
         except IntegrityError:
             await self.db.rollback()
