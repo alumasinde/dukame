@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import JSON, BigInteger, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -17,9 +17,12 @@ class OrderNotification(Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     order_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("orders.id", ondelete="CASCADE"), nullable=False)
     status_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("order_statuses.id", ondelete="RESTRICT"), nullable=False)
+    store_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("stores.id", ondelete="SET NULL"))
     channel: Mapped[str] = mapped_column(String(32), nullable=False)
     recipient: Mapped[str] = mapped_column(String(320), nullable=False)
     message: Mapped[str] = mapped_column(Text(), nullable=False)
+    template_name: Mapped[str | None] = mapped_column(String(120))
+    template_params: Mapped[dict | None] = mapped_column(JSON)
     tracking_url: Mapped[str] = mapped_column(String(1000), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False, server_default="pending")
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
@@ -39,4 +42,5 @@ class OrderNotification(Base):
         UniqueConstraint("order_id", "status_id", "channel", name="uq_order_notification_status_channel"),
         Index("ix_order_notifications_queue", "status", "available_at"),
         Index("ix_order_notifications_processing_lease", "status", "lease_expires_at"),
+        Index("ix_order_notifications_store_channel", "store_id", "channel"),
     )
