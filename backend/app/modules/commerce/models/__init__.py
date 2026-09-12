@@ -20,6 +20,7 @@ __all__ = [
     "AuditLog",
     "Cart",
     "CartItem",
+    "Customer",
     "IdempotencyKey",
     "InventoryMovement",
     "Order",
@@ -33,5 +34,4 @@ __all__ = [
     "PaymentAttempt",
     "PaymentEvent",
     "PaymentMethod",
-    "Customer",
 ]
