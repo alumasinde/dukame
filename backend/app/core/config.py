@@ -31,6 +31,8 @@ class Settings(BaseSettings):
     media_max_bytes: int = Field(default=5 * 1024 * 1024, ge=1024, le=25 * 1024 * 1024)
     cart_session_ttl_seconds: int = Field(default=2592000, ge=3600, le=31536000)
     cart_item_max_quantity: int = Field(default=1000, ge=1, le=100000)
+    delivery_otp_ttl_minutes: int = Field(default=15, ge=1, le=120)
+    delivery_otp_max_attempts: int = Field(default=5, ge=1, le=20)
     trusted_hosts: list[str] = Field(default_factory=lambda: ["localhost", "127.0.0.1", "dukamedev.local"])
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173", "http://127.0.0.1:5173", "http://dukamedev.local:5173"])
     frontend_base_url: str = "http://dukamedev.local:5173"
