@@ -132,5 +132,8 @@ def test_whatsapp_template_params_order() -> None:
 def test_commerce_uses_unified_notification_queue() -> None:
     service = read("app/modules/commerce/service.py")
     payment = read("app/modules/commerce/payment_service.py")
-    assert "queue_order_notifications" in service
-    assert "queue_order_notifications" in payment
+    notifications = read("app/modules/commerce/notifications.py")
+    # Commerce may call queue_order_notifications directly or via queue_order_sms wrapper.
+    assert "queue_order_notifications" in notifications
+    assert ("queue_order_notifications" in service) or ("queue_order_sms" in service)
+    assert ("queue_order_notifications" in payment) or ("queue_order_sms" in payment)
