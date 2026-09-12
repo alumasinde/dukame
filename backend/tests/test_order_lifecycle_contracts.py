@@ -1,6 +1,12 @@
+import importlib
+import inspect
+
 from app.modules.commerce.models.order_status_transition import OrderStatusTransition
 from app.modules.commerce.service import CommerceService
-from migrations.versions import _0018_order_transition_permissions as transition_permissions
+
+transition_permissions = importlib.import_module(
+    "migrations.versions.0018_order_transition_permissions"
+)
 
 
 def test_order_transition_requires_a_permission() -> None:
@@ -27,8 +33,6 @@ def test_every_seeded_order_transition_has_a_granular_permission() -> None:
 
 
 def test_status_update_no_longer_uses_broad_status_permission() -> None:
-    import inspect
-
     source = inspect.getsource(CommerceService.update_order_status)
     assert '"orders.status.manage"' not in source
     assert "transition.permission.key" in source
