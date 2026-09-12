@@ -6,13 +6,14 @@ from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.database import get_db
 from app.modules.auth.models.identity import User
 from app.modules.catalogue.services.context import resolve_store
+from app.modules.commerce.audit_service import record_audit
+from app.modules.commerce.notifications import normalize_phone
 from app.modules.customers.models.customer import Customer
 from app.modules.customers.repositories.customer import CustomerRepository
 from app.modules.customers.schemas.customer import CustomerCreate, CustomerUpdate
-from app.modules.commerce.notifications import normalize_phone
-from app.modules.commerce.audit_service import record_audit
 
 
 class CustomerService:
@@ -76,7 +77,7 @@ class CustomerService:
             if duplicate is not None and duplicate.id != customer.id:
                 raise HTTPException(status_code=409, detail="A customer with this phone number already exists")
             values["phone"] = phone
-        if "email" in values and values["email"]:
+        if values.get("email"):
             values["email"] = str(values["email"]).lower()
         for key, value in values.items():
             if isinstance(value, str):
