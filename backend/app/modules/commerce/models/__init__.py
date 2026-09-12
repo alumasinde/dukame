@@ -3,6 +3,7 @@ from app.modules.commerce.models.cart_item import CartItem
 from app.modules.commerce.models.idempotency_key import IdempotencyKey
 from app.modules.commerce.models.inventory_movement import InventoryMovement
 from app.modules.commerce.models.order import Order
+from app.modules.commerce.models.order_delivery import OrderDelivery
 from app.modules.commerce.models.order_item import OrderItem
 from app.modules.commerce.models.order_notification import OrderNotification
 from app.modules.commerce.models.order_status import OrderStatus
@@ -19,6 +20,7 @@ __all__ = [
     "IdempotencyKey",
     "InventoryMovement",
     "Order",
+    "OrderDelivery",
     "OrderItem",
     "OrderNotification",
     "OrderStatus",
