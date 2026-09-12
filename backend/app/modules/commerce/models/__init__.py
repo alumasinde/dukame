@@ -14,13 +14,12 @@ from app.modules.commerce.models.payment import Payment
 from app.modules.commerce.models.payment_attempt import PaymentAttempt
 from app.modules.commerce.models.payment_event import PaymentEvent
 from app.modules.commerce.models.payment_method import PaymentMethod
-from app.modules.customers.models.customer import Customer
+from app.modules.commerce.models.stock_reservation import StockReservation
 
 __all__ = [
     "AuditLog",
     "Cart",
     "CartItem",
-    "Customer",
     "IdempotencyKey",
     "InventoryMovement",
     "Order",
@@ -34,4 +33,5 @@ __all__ = [
     "PaymentAttempt",
     "PaymentEvent",
     "PaymentMethod",
+    "StockReservation",
 ]
