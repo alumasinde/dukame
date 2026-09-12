@@ -14,6 +14,7 @@ from app.modules.catalogue.models.variant_option_value import ProductVariantOpti
 from app.modules.catalogue.repositories.variant import VariantRepository
 from app.modules.catalogue.schemas.variant import VariantCreate, VariantUpdate
 from app.modules.catalogue.services.context import resolve_store
+from app.modules.commerce.models.inventory_movement import InventoryMovement
 
 
 class VariantService:
@@ -37,6 +38,21 @@ class VariantService:
         try:
             variant = await self.variants.create(public_id=uuid.uuid4().hex, store_id=store.id, product_id=product.id, **payload.model_dump(exclude={"option_value_public_ids"}))
             await self._replace_values(variant.id, payload.option_value_public_ids)
+            if payload.inventory_tracking and payload.inventory_quantity > 0:
+                self.db.add(
+                    InventoryMovement(
+                        public_id=uuid.uuid4().hex,
+                        store_id=store.id,
+                        product_id=product.id,
+                        variant_id=variant.id,
+                        movement_type="restock",
+                        quantity=payload.inventory_quantity,
+                        quantity_before=0,
+                        quantity_after=payload.inventory_quantity,
+                        reason="Initial stock",
+                        actor_user_id=user.id,
+                    )
+                )
             await self.db.commit()
         except IntegrityError:
             await self.db.rollback()
