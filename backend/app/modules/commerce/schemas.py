@@ -16,6 +16,13 @@ class CheckoutRequest(BaseModel):
     last_name: str = Field(min_length=1, max_length=100)
     phone: str = Field(min_length=7, max_length=32)
     email: str | None = Field(default=None, max_length=320)
+    
+    # Delivery details
+    delivery_address: str = Field(min_length=5, max_length=500)
+    delivery_landmark: str | None = Field(default=None, max_length=500)
+    delivery_notes: str | None = Field(default=None, max_length=1000)
+    delivery_option: str = Field(default="standard")  # standard, express, pickup
+    
     notes: str | None = Field(default=None, max_length=1000)
     payment_method_public_id: str | None = Field(default=None, min_length=1, max_length=32)
 
@@ -126,6 +133,10 @@ class OrderResponse(BaseModel):
     customer_last_name: str
     customer_email: str | None
     customer_phone: str
+    delivery_address: str
+    delivery_landmark: str | None
+    delivery_notes: str | None
+    delivery_option: str
     notes: str | None
     currency: str
     subtotal_minor: int
