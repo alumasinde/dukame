@@ -1,5 +1,11 @@
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.modules.catalogue.schemas.common import (
+    normalize_optional_blank_str,
+    reject_null_fields,
+    validate_catalogue_status,
+)
+
 
 class ProductCreate(BaseModel):
     name: str = Field(min_length=2, max_length=255)
@@ -14,10 +20,27 @@ class ProductCreate(BaseModel):
     inventory_quantity: int = Field(default=0, ge=0)
     status: str = Field(min_length=1, max_length=32)
 
+    @field_validator("name")
+    @classmethod
+    def normalize_name(cls, value: str) -> str:
+        return value.strip()
+
+    @field_validator("sku", "description")
+    @classmethod
+    def normalize_optional_text(cls, value: str | None) -> str | None:
+        return normalize_optional_blank_str(value)
+
     @field_validator("currency")
     @classmethod
     def normalize_currency(cls, value: str) -> str:
         return value.upper()
+
+    @field_validator("status")
+    @classmethod
+    def normalize_status(cls, value: str) -> str:
+        result = validate_catalogue_status(value)
+        assert result is not None
+        return result
 
     @model_validator(mode="after")
     def validate_compare_price(self):
@@ -42,20 +65,42 @@ class ProductUpdate(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def reject_null_required_fields(cls, value):
-        if isinstance(value, dict):
-            for field in ("name", "slug", "price_minor", "currency", "inventory_tracking", "status"):
-                if field in value and value[field] is None:
-                    raise ValueError(f"{field} cannot be null")
-        return value
+        return reject_null_fields(
+            value,
+            ("name", "slug", "price_minor", "currency", "inventory_tracking", "status"),
+        )
+
+    @field_validator("name")
+    @classmethod
+    def normalize_name(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return value.strip()
+
+    @field_validator("sku", "description")
+    @classmethod
+    def normalize_optional_text(cls, value: str | None) -> str | None:
+        return normalize_optional_blank_str(value)
 
     @field_validator("currency")
     @classmethod
     def normalize_currency(cls, value: str | None) -> str | None:
         return value.upper() if value else value
 
+    @field_validator("status")
+    @classmethod
+    def normalize_status(cls, value: str | None) -> str | None:
+        return validate_catalogue_status(value)
+
     @model_validator(mode="after")
-    def validate_compare_price(self):
-        if self.price_minor is not None and self.compare_at_price_minor is not None and self.compare_at_price_minor < self.price_minor:
+    def validate_compare_price_and_non_empty(self):
+        if self.model_fields_set == set():
+            raise ValueError("at least one field must be provided for update")
+        if (
+            self.price_minor is not None
+            and self.compare_at_price_minor is not None
+            and self.compare_at_price_minor < self.price_minor
+        ):
             raise ValueError("compare_at_price_minor must be greater than or equal to price_minor")
         return self
 
