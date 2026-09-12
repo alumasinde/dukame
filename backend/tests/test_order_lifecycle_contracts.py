@@ -1,6 +1,7 @@
 import importlib
 import inspect
 
+from app.modules.commerce.models.idempotency_key import IdempotencyKey
 from app.modules.commerce.models.order_status_transition import OrderStatusTransition
 from app.modules.commerce.service import CommerceService
 
@@ -36,3 +37,19 @@ def test_status_update_no_longer_uses_broad_status_permission() -> None:
     source = inspect.getsource(CommerceService.update_order_status)
     assert '"orders.status.manage"' not in source
     assert "transition.permission.key" in source
+
+
+def test_idempotency_key_is_store_and_operation_scoped() -> None:
+    constraints = IdempotencyKey.__table__.constraints
+    assert any(
+        constraint.name == "uq_idempotency_store_operation_scope_key"
+        and {column.name for column in constraint.columns}
+        == {"store_id", "operation", "scope_key", "key"}
+        for constraint in constraints
+    )
+
+
+def test_checkout_and_status_update_accept_idempotency_keys() -> None:
+    assert "idempotency_key" in inspect.signature(CommerceService.checkout).parameters
+    assert "idempotency_key" in inspect.signature(CommerceService.update_order_status).parameters
+    assert "_claim_idempotency" in inspect.getsource(CommerceService)
