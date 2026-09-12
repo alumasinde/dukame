@@ -4,7 +4,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "0019_commerce_idempotency"
-down_revision = "0018_order_transition_permissions"
+down_revision = "0018_order_transition_perm"
 branch_labels = None
 depends_on = None
 
