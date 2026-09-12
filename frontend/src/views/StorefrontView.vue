@@ -6,20 +6,33 @@ import { useStorefrontShop } from '../lib/useStorefrontShop'
 const {
   store, loading, error, selectedCategory, searchQuery, searchInput, sortBy, page,
   addingProduct, addedProduct, addError, quantityBusy, showCartDrawer, favorites,
-  recentSearches, showRecent, inStockOnly, storeSlug, topLevelCategories, selectedCategoryItem,
+  recentSearches, showRecent, inStockOnly, savedCart, storeClosed, closedStoreName,
+  restoringCart, saveCartNote, storeSlug, topLevelCategories, selectedCategoryItem,
   childCategories, heroProducts, showStickyCart, whatsappUrl, totalFiltered, totalPages,
   pagedProducts, resultLabel, cartState, money, image, hasDiscount, categoryCount, hasVariants,
   isAvailable, cartItemFor, isFavorite, toggleFavorite, closeDrawer, onSearchInput, commitSearch,
   applyRecent, clearSearch, clearAllFilters, suggestedCategories, selectCategory, addProduct,
   changeProductQuantity, changeDrawerQuantity, load, isNewProduct, clearRecentSearches,
+  persistCartLocally, dismissSavedCart, restoreSavedCart,
 } = useStorefrontShop()
 
 onMounted(() => { void load() })
 </script>
 
 <template>
-  <main class="storefront-page">
+  <main class="storefront-page" id="storefront-main">
+    <a class="skip-link" href="#storefront-products">Skip to products</a>
     <div v-if="loading" class="storefront-state"><div class="status-spinner" /><p>Loading store…</p></div>
+    <div v-else-if="storeClosed" class="storefront-state storefront-closed-state">
+      <div class="storefront-empty-icon" aria-hidden="true">⏸</div>
+      <h1>{{ closedStoreName || 'Store' }} is closed</h1>
+      <p>{{ error }}</p>
+      <p class="storefront-closed-hint">You can still look up an existing order with your phone number.</p>
+      <div class="storefront-empty-actions">
+        <RouterLink :to="`/${storeSlug}/track`" class="button button-primary">Track an order</RouterLink>
+        <RouterLink to="/login" class="button button-secondary">Go to DukaMe</RouterLink>
+      </div>
+    </div>
     <div v-else-if="error" class="storefront-state"><div class="storefront-empty-icon">!</div><h1>Store unavailable</h1><p>{{ error }}</p><RouterLink to="/login" class="button button-primary">Go to DukaMe</RouterLink></div>
     <template v-else-if="store">
       <header class="storefront-header">
@@ -28,12 +41,14 @@ onMounted(() => { void load() })
           <div><strong>{{ store.name }}</strong><small>Powered by DukaMe</small></div>
         </RouterLink>
         <div class="storefront-header-actions">
+          <RouterLink :to="`/${store.slug}/track`" class="storefront-header-link is-track" title="Track order">Track</RouterLink>
           <a v-if="whatsappUrl" class="storefront-header-link is-wa" :href="whatsappUrl" target="_blank" rel="noopener noreferrer" title="Chat on WhatsApp"><span aria-hidden="true">WA</span><span class="wa-label">WhatsApp</span></a>
           <RouterLink :to="`/${store.slug}/favourites`" class="storefront-header-link storefront-fav-badge" aria-label="Favourites">
-            ♥<span v-if="favorites.length">{{ favorites.length }}</span>
+            ♥<span v-if="favorites.length" aria-hidden="true">{{ favorites.length }}</span>
+            <span v-if="favorites.length" class="sr-only">{{ favorites.length }} favourites</span>
           </RouterLink>
-          <RouterLink :to="`/${store.slug}/cart`" class="storefront-header-link" @click.prevent="showCartDrawer = true">
-            Cart <span v-if="cartState.itemCount.value">{{ cartState.itemCount.value }}</span>
+          <RouterLink :to="`/${store.slug}/cart`" class="storefront-header-link" :aria-label="cartState.itemCount.value ? `Cart, ${cartState.itemCount.value} items` : 'Cart'" @click.prevent="showCartDrawer = true">
+            Cart <span v-if="cartState.itemCount.value" aria-hidden="true">{{ cartState.itemCount.value }}</span>
           </RouterLink>
         </div>
       </header>
@@ -111,6 +126,17 @@ onMounted(() => { void load() })
           </label>
         </div>
 
+        <div v-if="savedCart?.items?.length && !cartState.itemCount.value" class="storefront-saved-banner" role="status">
+          <p><strong>Saved cart</strong> · {{ savedCart.items.length }} item{{ savedCart.items.length === 1 ? '' : 's' }} on this device</p>
+          <div class="storefront-saved-actions">
+            <button type="button" class="button button-primary button-sm" :disabled="restoringCart" @click="restoreSavedCart">{{ restoringCart ? 'Restoring…' : 'Restore cart' }}</button>
+            <button type="button" class="button button-secondary button-sm" @click="dismissSavedCart">Dismiss</button>
+          </div>
+        </div>
+        <div v-if="saveCartNote" class="storefront-saved-banner" role="status">
+          <p>{{ saveCartNote }}</p>
+          <button type="button" class="button button-secondary button-sm" @click="saveCartNote = ''">OK</button>
+        </div>
         <div v-if="addError" class="storefront-inline-error storefront-add-error" role="alert">{{ addError }} <button type="button" @click="addError = ''">Dismiss</button></div>
 
         <div v-if="store.categories.length" class="storefront-category-panel">
@@ -128,7 +154,7 @@ onMounted(() => { void load() })
           </div>
         </div>
 
-        <div class="storefront-products-section">
+        <div id="storefront-products" class="storefront-products-section" tabindex="-1">
           <div v-if="pagedProducts.length" class="storefront-grid">
             <article v-for="product in pagedProducts" :key="product.public_id" class="storefront-product" :class="{ 'storefront-product-unavailable': !isAvailable(product) }">
               <div class="storefront-product-image">
@@ -205,8 +231,8 @@ onMounted(() => { void load() })
       </RouterLink>
 
       <Teleport to="body">
-        <div v-if="showCartDrawer" class="storefront-cart-drawer-backdrop" @click="closeDrawer" />
-        <aside v-if="showCartDrawer" class="storefront-cart-drawer" aria-label="Shopping cart">
+        <div v-if="showCartDrawer" class="storefront-cart-drawer-backdrop" aria-hidden="true" @click="closeDrawer" />
+        <aside v-if="showCartDrawer" class="storefront-cart-drawer" role="dialog" aria-modal="true" aria-label="Shopping cart" tabindex="-1">
           <div class="storefront-cart-drawer-head">
             <div>
               <strong>Your cart</strong>
@@ -239,6 +265,15 @@ onMounted(() => { void load() })
               <button type="button" class="button button-secondary" @click="closeDrawer">Continue shopping</button>
               <RouterLink :to="`/${store.slug}/cart`" class="button button-primary" @click="closeDrawer">Checkout</RouterLink>
             </div>
+            <button
+              v-if="cartState.itemCount.value"
+              type="button"
+              class="button button-secondary button-block"
+              style="margin-top:8px"
+              @click="persistCartLocally"
+            >
+              Save cart for later
+            </button>
             <p class="storefront-drawer-note">Secure checkout · Never share your M-Pesa PIN with anyone.</p>
           </div>
         </aside>
