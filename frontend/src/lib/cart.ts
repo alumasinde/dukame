@@ -21,6 +21,10 @@ export function updateCartItem(storeSlug: string, itemPublicId: string, quantity
 export function removeCartItem(storeSlug: string, itemPublicId: string) { return api.delete<Cart>(path(storeSlug, `/cart/items/${encodeURIComponent(itemPublicId)}`)) }
 export function checkoutCart(storeSlug: string, payload: CheckoutPayload) { return api.post<Order>(path(storeSlug, '/cart/checkout'), payload) }
 export function getOrderTracking(storeSlug: string, token: string) { return api.get<OrderTracking>(path(storeSlug, `/order/track/${encodeURIComponent(token)}`)) }
+/** Customer-facing STK retry using the order tracking token (no merchant auth). */
+export function retryStorefrontPayment(storeSlug: string, trackingToken: string) {
+  return api.post<Payment>(path(storeSlug, `/order/track/${encodeURIComponent(trackingToken)}/payment/retry`))
+}
 export function getPaymentMethodsForTenant(tenantPublicId: string) { return api.get<PaymentMethod[]>(`/tenants/${encodeURIComponent(tenantPublicId)}/payment-methods`) }
 export function createPaymentMethod(tenantPublicId: string, payload: { code: string; name: string; instructions?: string; is_enabled?: boolean; config?: Record<string, string> }) { return api.post<PaymentMethod>(`/tenants/${encodeURIComponent(tenantPublicId)}/payment-methods`, payload) }
 export function updatePaymentMethod(tenantPublicId: string, methodPublicId: string, payload: { name?: string; instructions?: string; is_enabled?: boolean; config?: Record<string, string> }) { return api.patch<PaymentMethod>(`/tenants/${encodeURIComponent(tenantPublicId)}/payment-methods/${encodeURIComponent(methodPublicId)}`, payload) }
