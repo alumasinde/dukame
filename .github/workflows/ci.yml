@@ -67,7 +67,50 @@ jobs:
           DATABASE_URL: mysql://dukame:dukame@127.0.0.1:3306/dukame_test
           REDIS_URL: redis://127.0.0.1:6379/0
           JWT_SECRET: ci-test-secret-change-me-2026-strong
-        run: mypy app/modules/customers --follow-imports=skip --disable-error-code=misc,redundant-cast,no-any-return
+        run: mypy app/modules/customers --follow-imports=skip --disable-error-code=misc --disable-error-code=redundant-cast --disable-error-code=no-any-return
+      - name: Production image build
+        run: docker build -f Dockerfile -t dukame-api:ci .
+      - name: Production compose validation
+        run: DUKAME_ENV_FILE=.env.example docker compose -f docker-compose.prod.yml config
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --upgrade pip
+      - run: pip install ".[dev]"
+      - name: Ruff
+        run: ruff check app migrations tests
+      - name: Migration upgrade
+        env:
+          DATABASE_URL: mysql://dukame:dukame@127.0.0.1:3306/dukame_test
+          REDIS_URL: redis://127.0.0.1:6379/0
+          JWT_SECRET: ci-test-secret-change-me-2026-strong
+        run: alembic upgrade head
+      - name: Migration consistency
+        env:
+          DATABASE_URL: mysql://dukame:dukame@127.0.0.1:3306/dukame_test
+          REDIS_URL: redis://127.0.0.1:6379/0
+          JWT_SECRET: ci-test-secret-change-me-2026-strong
+        run: alembic check
+      - name: Tests
+        env:
+          DATABASE_URL: mysql://dukame:dukame@127.0.0.1:3306/dukame_test
+          REDIS_URL: redis://127.0.0.1:6379/0
+          JWT_SECRET: ci-test-secret-change-me-2026-strong
+        run: pytest
+      - name: Mypy
+        env:
+          DATABASE_URL: mysql://dukame:dukame@127.0.0.1:3306/dukame_test
+          REDIS_URL: redis://127.0.0.1:6379/0
+          JWT_SECRET: ci-test-secret-change-me-2026-strong
+        run: mypy app/modules/customers --follow-imports=skip --disable-error-code=misc --disable-error-code=redundant-cast --disable-error-code=no-any-return
       - name: Production image build
         run: docker build -f Dockerfile -t dukame-api:ci .
       - name: Production compose validation
