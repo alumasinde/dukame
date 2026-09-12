@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, String, UniqueConstraint, func
+from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Index, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -22,6 +22,8 @@ class Store(Base):
     description: Mapped[str | None] = mapped_column(String(1000))
     status: Mapped[str] = mapped_column(String(32), nullable=False, server_default="active")
     currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    sms_notifications_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="0")
+    whatsapp_notifications_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="0")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
 
