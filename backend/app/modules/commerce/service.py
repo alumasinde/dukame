@@ -110,9 +110,10 @@ class CommerceService:
         items = list((await self.db.scalars(select(CartItem).options(selectinload(CartItem.product).selectinload(Product.media), selectinload(CartItem.variant).selectinload(ProductVariant.option_value_links).selectinload(ProductVariantOptionValue.option_value).selectinload(ProductOptionValue.option)).where(CartItem.cart_id == cart.id).with_for_update())).all())
         if not items:
             raise HTTPException(status_code=422, detail="Your cart is empty")
-        initial_status = await self.db.scalar(select(OrderStatus).where(OrderStatus.is_initial.is_(True), OrderStatus.is_active.is_(True)).order_by(OrderStatus.sort_order.asc(), OrderStatus.id.asc()).limit(1))
-        if initial_status is None:
-            raise HTTPException(status_code=500, detail="No initial order status is configured")
+        initial_statuses = list((await self.db.scalars(select(OrderStatus).where(OrderStatus.is_initial.is_(True), OrderStatus.is_active.is_(True)).order_by(OrderStatus.sort_order.asc(), OrderStatus.id.asc()))).all())
+        if len(initial_statuses) != 1:
+            raise HTTPException(status_code=500, detail="Order workflow must have exactly one active initial status")
+        initial_status = initial_statuses[0]
         subtotal = 0
         snapshots: list[tuple[CartItem, Product, ProductVariant | None, int]] = []
         for item in items:
@@ -181,6 +182,8 @@ class CommerceService:
             raise HTTPException(status_code=404, detail="Order not found")
         if order.status.is_terminal:
             raise HTTPException(status_code=409, detail="An order in a final status cannot be changed")
+        if not order.status.is_active:
+            raise HTTPException(status_code=409, detail="The current order status is inactive")
         status = await self.db.scalar(select(OrderStatus).where(OrderStatus.public_id == payload.status_public_id, OrderStatus.is_active.is_(True)))
         if status is None:
             raise HTTPException(status_code=422, detail="Order status not found")
@@ -189,9 +192,11 @@ class CommerceService:
         transition = await self.db.scalar(
             select(OrderStatusTransition)
             .options(selectinload(OrderStatusTransition.permission))
+            .join(OrderStatus, OrderStatus.id == OrderStatusTransition.from_status_id)
             .where(
                 OrderStatusTransition.from_status_id == order.status_id,
                 OrderStatusTransition.to_status_id == status.id,
+                OrderStatus.is_active.is_(True),
             )
         )
         if transition is None or transition.permission is None:
