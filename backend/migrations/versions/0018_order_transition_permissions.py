@@ -177,12 +177,19 @@ def downgrade() -> None:
     permission_table = sa.table(
         "permissions",
         sa.column("id", sa.BigInteger),
+        sa.column("public_id", sa.String(32)),
         sa.column("key", sa.String(150)),
+        sa.column("name", sa.String(150)),
     )
     role_permissions = sa.table(
         "tenant_role_permissions",
         sa.column("role_id", sa.BigInteger),
         sa.column("permission_id", sa.BigInteger),
+    )
+    roles = sa.table(
+        "tenant_roles",
+        sa.column("id", sa.BigInteger),
+        sa.column("slug", sa.String(100)),
     )
 
     keys = [key for key, _ in PERMISSIONS]
@@ -212,4 +219,17 @@ def downgrade() -> None:
     if permission_ids:
         bind.execute(
             sa.delete(permission_table).where(permission_table.c.id.in_(permission_ids))
+        )
+
+    status_manage = bind.execute(
+        sa.select(permission_table.c.id).where(permission_table.c.key == "orders.status.manage")
+    ).scalar()
+    if status_manage is not None:
+        bind.execute(
+            sa.insert(role_permissions).from_select(
+                ["role_id", "permission_id"],
+                sa.select(roles.c.id, sa.literal(status_manage)).where(
+                    roles.c.slug.in_("owner", "admin", "manager")
+                ),
+            )
         )
