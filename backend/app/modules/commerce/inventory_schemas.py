@@ -3,7 +3,7 @@ from pydantic import BaseModel, Field
 
 class InventoryAdjustmentRequest(BaseModel):
     variant_public_id: str | None = Field(default=None, min_length=1, max_length=32)
-    delta: int = Field(ne=0)
+    delta: int = Field(description="Signed inventory quantity adjustment; zero is not allowed")
     movement_type: str = Field(min_length=3, max_length=32)
     reason: str | None = Field(default=None, max_length=500)
 
