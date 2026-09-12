@@ -1,4 +1,5 @@
 from functools import lru_cache
+import secrets
 
 from pydantic import Field, MySQLDsn, RedisDsn, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
