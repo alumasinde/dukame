@@ -8,7 +8,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.auth.models.identity import User
 from app.modules.catalogue.models.product import Product
-from app.modules.catalogue.models.store import Store
 from app.modules.catalogue.models.variant import ProductVariant
 from app.modules.catalogue.services.context import resolve_store
 from app.modules.commerce.models.inventory_movement import InventoryMovement
