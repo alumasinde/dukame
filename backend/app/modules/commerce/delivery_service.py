@@ -15,6 +15,7 @@ from app.modules.catalogue.services.context import resolve_store
 from app.modules.commerce.models.order import Order
 from app.modules.commerce.models.order_delivery import OrderDelivery
 from app.modules.rbac.services.rbac import require_permission
+from app.modules.tenancy.models.tenant import TenantUser
 
 
 class DeliveryService:
@@ -37,6 +38,9 @@ class DeliveryService:
     async def assign(self, user: User, tenant_public_id: str, order_public_id: str, assigned_user_id: int) -> OrderDelivery:
         store = await resolve_store(self.db, user, tenant_public_id, "delivery.assign")
         await require_permission(self.db, user, store.tenant_id, "delivery.assign")
+        member = await self.db.scalar(select(TenantUser).where(TenantUser.tenant_id == store.tenant_id, TenantUser.user_id == assigned_user_id, TenantUser.status == "active"))
+        if member is None:
+            raise HTTPException(status_code=422, detail="Delivery person is not an active member of this business")
         delivery = await self._delivery(store.id, order_public_id, lock=True)
         if delivery is None:
             delivery = await self._create_locked(store, order_public_id)
