@@ -2,7 +2,7 @@
 
 from alembic import op
 
-revision = "0022_inventory_movement_idempotency"
+revision = "0022_inventory_movement_idemp"
 down_revision = "0021_inventory_permissions"
 branch_labels = None
 depends_on = None
