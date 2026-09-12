@@ -71,11 +71,15 @@ class SubscriptionUpgradeRequest(BaseModel):
     billing_interval: str = Field(
         default="monthly", pattern="^(monthly|quarterly|yearly)$"
     )
-    phone: str = Field(min_length=9, max_length=20)
+    phone: str | None = Field(default=None, min_length=9, max_length=20)
 
 
 class SubscriptionPayInvoiceRequest(BaseModel):
     phone: str = Field(min_length=9, max_length=20)
+
+
+class SubscriptionMarkPaidRequest(BaseModel):
+    note: str | None = Field(default=None, max_length=500)
 
 
 class SubscriptionResponse(BaseModel):

@@ -3,7 +3,6 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
 from app.modules.auth.models.identity import User
@@ -18,6 +17,7 @@ from app.modules.subscriptions.schemas.subscription import (
     SubscriptionChangeRequest,
     SubscriptionEventResponse,
     SubscriptionInvoiceResponse,
+    SubscriptionMarkPaidRequest,
     SubscriptionPayInvoiceRequest,
     SubscriptionPaymentResponse,
     SubscriptionResponse,
@@ -27,10 +27,13 @@ from app.modules.subscriptions.schemas.subscription import (
     UsageSnapshotResponse,
 )
 from app.modules.subscriptions.services.billing import (
+    INVOICE_OPEN,
+    INVOICE_PAID,
     create_upgrade_invoice,
     get_invoice_by_public_id,
     initiate_invoice_payment,
     list_tenant_invoices,
+    mark_invoice_paid_manual,
 )
 from app.modules.subscriptions.services.subscription import (
     cancel_subscription,
@@ -207,7 +210,6 @@ async def change(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SubscriptionResponse:
-    """Change to a free plan only. Paid plans must use /upgrade."""
     tenant = await authorized_tenant(db, user, tenant_public_id, "subscription.manage")
     subscription = await change_subscription(
         db, user, tenant.public_id, payload.plan_public_id, payload.billing_interval
@@ -223,7 +225,6 @@ async def upgrade(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> UpgradeResponse:
-    """Start a paid plan upgrade: create invoice and optionally trigger M-Pesa STK."""
     tenant = await authorized_tenant(db, user, tenant_public_id, "subscription.manage")
     subscription, invoice = await create_upgrade_invoice(
         db,
@@ -232,15 +233,28 @@ async def upgrade(
         payload.plan_public_id,
         payload.billing_interval,
     )
-    payment = await initiate_invoice_payment(db, invoice, phone=payload.phone)
-    # Reload invoice with payments
+    payment = None
+    # Reload subscription after possible zero-amount auto-apply
+    subscription = await get_tenant_subscription(db, user, tenant.public_id)
+    assert subscription is not None
     invoice = await get_invoice_by_public_id(db, invoice.public_id)
     assert invoice is not None
+
+    if invoice.status == INVOICE_OPEN:
+        if not payload.phone:
+            raise HTTPException(
+                status_code=422,
+                detail="phone is required to initiate payment for an open invoice",
+            )
+        payment = await initiate_invoice_payment(db, invoice, phone=payload.phone)
+        invoice = await get_invoice_by_public_id(db, invoice.public_id)
+        assert invoice is not None
+
     await db.commit()
     return UpgradeResponse(
         subscription=subscription_response(subscription),
         invoice=await invoice_response(db, invoice),
-        payment=payment_response(payment),
+        payment=payment_response(payment) if payment else None,
     )
 
 
@@ -262,6 +276,40 @@ async def pay_invoice(
     payment = await initiate_invoice_payment(db, invoice, phone=payload.phone)
     await db.commit()
     return payment_response(payment)
+
+
+@router.post(
+    "/{tenant_public_id}/invoices/{invoice_public_id}/mark-paid",
+    response_model=UpgradeResponse,
+)
+async def mark_invoice_paid(
+    tenant_public_id: str,
+    invoice_public_id: str,
+    payload: SubscriptionMarkPaidRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> UpgradeResponse:
+    """Mark an open invoice as paid (support / offline payment / M-Pesa disabled)."""
+    tenant = await authorized_tenant(db, user, tenant_public_id, "subscription.manage")
+    invoice = await get_invoice_by_public_id(db, invoice_public_id)
+    if invoice is None or invoice.tenant_id != tenant.id:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    if invoice.status != INVOICE_OPEN:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "invoice_not_open", "status": invoice.status},
+        )
+    subscription = await mark_invoice_paid_manual(
+        db, invoice=invoice, actor_user_id=user.id, note=payload.note
+    )
+    invoice = await get_invoice_by_public_id(db, invoice_public_id)
+    assert invoice is not None and invoice.status == INVOICE_PAID
+    await db.commit()
+    return UpgradeResponse(
+        subscription=subscription_response(subscription),
+        invoice=await invoice_response(db, invoice),
+        payment=None,
+    )
 
 
 @router.post("/{tenant_public_id}/cancel", response_model=SubscriptionResponse)
