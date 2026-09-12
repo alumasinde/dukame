@@ -2,7 +2,7 @@
 
 from alembic import op
 
-revision = "0025_inventory_order_reference_integrity"
+revision = "0025_inventory_order_ref"
 down_revision = "0024_delivery_permissions"
 branch_labels = None
 depends_on = None
