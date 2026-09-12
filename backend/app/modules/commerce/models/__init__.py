@@ -1,6 +1,7 @@
 from app.modules.commerce.models.cart import Cart
 from app.modules.commerce.models.cart_item import CartItem
 from app.modules.commerce.models.idempotency_key import IdempotencyKey
+from app.modules.commerce.models.inventory_movement import InventoryMovement
 from app.modules.commerce.models.order import Order
 from app.modules.commerce.models.order_item import OrderItem
 from app.modules.commerce.models.order_notification import OrderNotification
@@ -16,6 +17,7 @@ __all__ = [
     "Cart",
     "CartItem",
     "IdempotencyKey",
+    "InventoryMovement",
     "Order",
     "OrderItem",
     "OrderNotification",
