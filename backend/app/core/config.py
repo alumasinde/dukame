@@ -49,6 +49,7 @@ class Settings(BaseSettings):
     notification_lease_seconds: int = Field(default=60, ge=30, le=600)
     notification_max_backoff_seconds: int = Field(default=300, ge=5, le=86400)
     notification_worker_id: str = Field(default_factory=lambda: secrets.token_hex(16), min_length=1, max_length=64)
+    maintenance_interval_seconds: int = Field(default=300, ge=30, le=86400)
 
     @field_validator("environment")
     @classmethod
