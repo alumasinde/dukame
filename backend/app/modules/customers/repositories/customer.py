@@ -1,3 +1,5 @@
+from typing import cast
+
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -28,16 +30,17 @@ class CustomerRepository:
                 | Customer.phone.like(term)
                 | Customer.email.like(term)
             )
-        return list((await self.db.execute(stmt)).all())
+        rows = (await self.db.execute(stmt)).all()
+        return [(cast(Customer, row[0]), int(row[1])) for row in rows]
 
     async def get(self, store_id: int, public_id: str) -> Customer | None:
-        return await self.db.scalar(select(Customer).where(Customer.store_id == store_id, Customer.public_id == public_id))
+        return cast(Customer | None, await self.db.scalar(select(Customer).where(Customer.store_id == store_id, Customer.public_id == public_id)))
 
     async def get_by_phone(self, store_id: int, phone: str, lock: bool = False) -> Customer | None:
         stmt = select(Customer).where(Customer.store_id == store_id, Customer.phone == phone)
         if lock:
             stmt = stmt.with_for_update()
-        return await self.db.scalar(stmt)
+        return cast(Customer | None, await self.db.scalar(stmt))
 
     async def get_with_order_count(self, store_id: int, public_id: str) -> tuple[Customer, int] | None:
         stmt = (
@@ -46,4 +49,7 @@ class CustomerRepository:
             .where(Customer.store_id == store_id, Customer.public_id == public_id)
             .group_by(Customer.id)
         )
-        return (await self.db.execute(stmt)).one_or_none()
+        row = (await self.db.execute(stmt)).one_or_none()
+        if row is None:
+            return None
+        return cast(Customer, row[0]), int(row[1])
