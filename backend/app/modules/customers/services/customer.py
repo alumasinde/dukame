@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from typing import cast
 
 from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
@@ -27,18 +28,22 @@ class CustomerService:
             raise HTTPException(status_code=422, detail="Invalid customer phone number")
         return phone
 
-    async def list(self, user: User, tenant_public_id: str, offset: int, limit: int, search: str | None):
+    async def list(
+        self, user: User, tenant_public_id: str, offset: int, limit: int, search: str | None
+    ) -> list[tuple[Customer, int]]:
         store = await resolve_store(self.db, user, tenant_public_id, "customers.read")
-        return await self.repository.list(store.id, offset, limit, search)
+        return cast(list[tuple[Customer, int]], await self.repository.list(store.id, offset, limit, search))
 
-    async def get(self, user: User, tenant_public_id: str, public_id: str):
+    async def get(self, user: User, tenant_public_id: str, public_id: str) -> tuple[Customer, int]:
         store = await resolve_store(self.db, user, tenant_public_id, "customers.read")
         result = await self.repository.get_with_order_count(store.id, public_id)
         if result is None:
             raise HTTPException(status_code=404, detail="Customer not found")
         return result
 
-    async def create(self, user: User, tenant_public_id: str, payload: CustomerCreate):
+    async def create(
+        self, user: User, tenant_public_id: str, payload: CustomerCreate
+    ) -> tuple[Customer, int]:
         store = await resolve_store(self.db, user, tenant_public_id, "customers.manage")
         phone = self._phone(payload.phone)
         existing = await self.repository.get_by_phone(store.id, phone)
@@ -56,19 +61,46 @@ class CustomerService:
         self.db.add(customer)
         try:
             await self.db.flush()
-            await record_audit(self.db, tenant_id=store.tenant_id, store_id=store.id, actor_user_id=user.id, action="customer.created", entity_type="customer", entity_public_id=customer.public_id, after={"first_name": customer.first_name, "last_name": customer.last_name, "phone": customer.phone, "email": customer.email, "is_active": customer.is_active})
+            await record_audit(
+                self.db,
+                tenant_id=store.tenant_id,
+                store_id=store.id,
+                actor_user_id=user.id,
+                action="customer.created",
+                entity_type="customer",
+                entity_public_id=customer.public_id,
+                after={
+                    "first_name": customer.first_name,
+                    "last_name": customer.last_name,
+                    "phone": customer.phone,
+                    "email": customer.email,
+                    "is_active": customer.is_active,
+                },
+            )
             await self.db.commit()
         except IntegrityError:
             await self.db.rollback()
             raise HTTPException(status_code=409, detail="A customer with this phone number already exists") from None
-        return await self.repository.get_with_order_count(store.id, customer.public_id)
+        result = await self.repository.get_with_order_count(store.id, customer.public_id)
+        if result is None:
+            raise HTTPException(status_code=500, detail="Customer could not be loaded after creation")
+        return result
 
-    async def update(self, user: User, tenant_public_id: str, public_id: str, payload: CustomerUpdate):
+    async def update(
+        self, user: User, tenant_public_id: str, public_id: str, payload: CustomerUpdate
+    ) -> tuple[Customer, int]:
         store = await resolve_store(self.db, user, tenant_public_id, "customers.manage")
         customer = await self.repository.get(store.id, public_id)
         if customer is None:
             raise HTTPException(status_code=404, detail="Customer not found")
-        before = {"first_name": customer.first_name, "last_name": customer.last_name, "phone": customer.phone, "email": customer.email, "notes": customer.notes, "is_active": customer.is_active}
+        before = {
+            "first_name": customer.first_name,
+            "last_name": customer.last_name,
+            "phone": customer.phone,
+            "email": customer.email,
+            "notes": customer.notes,
+            "is_active": customer.is_active,
+        }
         values = payload.model_dump(exclude_unset=True)
         if "phone" in values:
             phone = self._phone(values["phone"])
@@ -79,14 +111,32 @@ class CustomerService:
         if values.get("email"):
             values["email"] = str(values["email"]).lower()
         for key, value in values.items():
-            if isinstance(value, str):
-                value = value.strip()
-            setattr(customer, key, value)
-        after = {"first_name": customer.first_name, "last_name": customer.last_name, "phone": customer.phone, "email": customer.email, "notes": customer.notes, "is_active": customer.is_active}
+            setattr(customer, key, value.strip() if isinstance(value, str) else value)
+        after = {
+            "first_name": customer.first_name,
+            "last_name": customer.last_name,
+            "phone": customer.phone,
+            "email": customer.email,
+            "notes": customer.notes,
+            "is_active": customer.is_active,
+        }
         try:
-            await record_audit(self.db, tenant_id=store.tenant_id, store_id=store.id, actor_user_id=user.id, action="customer.updated", entity_type="customer", entity_public_id=customer.public_id, before=before, after=after)
+            await record_audit(
+                self.db,
+                tenant_id=store.tenant_id,
+                store_id=store.id,
+                actor_user_id=user.id,
+                action="customer.updated",
+                entity_type="customer",
+                entity_public_id=customer.public_id,
+                before=before,
+                after=after,
+            )
             await self.db.commit()
         except IntegrityError:
             await self.db.rollback()
             raise HTTPException(status_code=409, detail="Customer could not be updated with the supplied values") from None
-        return await self.repository.get_with_order_count(store.id, customer.public_id)
+        result = await self.repository.get_with_order_count(store.id, customer.public_id)
+        if result is None:
+            raise HTTPException(status_code=500, detail="Customer could not be loaded after update")
+        return result
