@@ -1,5 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import asc, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -13,6 +13,8 @@ from app.modules.catalogue.models.variant_option_value import ProductVariantOpti
 from app.modules.storefront.schemas import StorefrontProductResponse, StorefrontResponse
 
 router = APIRouter(prefix="/storefront", tags=["storefront"])
+
+SORT_OPTIONS = {"featured", "price_asc", "price_desc", "newest"}
 
 
 def product_response(product: Product, include_variants: bool = False) -> StorefrontProductResponse:
@@ -76,18 +78,81 @@ async def get_active_store(db: AsyncSession, slug: str) -> Store:
 
 
 @router.get("/{store_slug}", response_model=StorefrontResponse)
-async def get_storefront(store_slug: str, db: AsyncSession = Depends(get_db)) -> StorefrontResponse:
+async def get_storefront(
+    store_slug: str,
+    db: AsyncSession = Depends(get_db),
+    sort: str = Query(default="featured", description="featured | price_asc | price_desc | newest"),
+    limit: int | None = Query(default=None, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    q: str | None = Query(default=None, max_length=120),
+    category: str | None = Query(default=None, description="Category slug filter"),
+) -> StorefrontResponse:
     store = await get_active_store(db, store_slug)
-    products = list(
-        (
-            await db.scalars(
-                select(Product)
-                .options(selectinload(Product.media), selectinload(Product.category).selectinload(Category.parent))
-                .where(Product.store_id == store.id, Product.status == "active")
-                .order_by(Product.created_at.desc())
+    sort_key = sort if sort in SORT_OPTIONS else "featured"
+
+    filters = [Product.store_id == store.id, Product.status == "active"]
+
+    if q and q.strip():
+        term = f"%{q.strip().lower()}%"
+        filters.append(
+            or_(
+                func.lower(Product.name).like(term),
+                func.lower(func.coalesce(Product.description, "")).like(term),
             )
-        ).all()
+        )
+
+    category_ids: list[int] | None = None
+    if category and category.strip():
+        cat = await db.scalar(
+            select(Category).where(
+                Category.store_id == store.id,
+                Category.slug == category.strip(),
+                Category.status == "active",
+            )
+        )
+        if cat is not None:
+            all_cats = list(
+                (
+                    await db.scalars(
+                        select(Category).where(Category.store_id == store.id, Category.status == "active")
+                    )
+                ).all()
+            )
+            by_parent: dict[int | None, list[Category]] = {}
+            for item in all_cats:
+                by_parent.setdefault(item.parent_id, []).append(item)
+
+            def collect(node_id: int) -> list[int]:
+                ids = [node_id]
+                for child in by_parent.get(node_id, []):
+                    ids.extend(collect(child.id))
+                return ids
+
+            category_ids = collect(cat.id)
+            filters.append(Product.category_id.in_(category_ids))
+
+    total = await db.scalar(select(func.count()).select_from(Product).where(*filters)) or 0
+
+    order_clause = Product.created_at.desc()
+    if sort_key == "price_asc":
+        order_clause = asc(Product.price_minor)
+    elif sort_key == "price_desc":
+        order_clause = desc(Product.price_minor)
+    elif sort_key == "newest":
+        order_clause = desc(Product.created_at)
+    else:
+        order_clause = desc(Product.created_at)
+
+    query = (
+        select(Product)
+        .options(selectinload(Product.media), selectinload(Product.category).selectinload(Category.parent))
+        .where(*filters)
+        .order_by(order_clause)
     )
+    if limit is not None:
+        query = query.offset(offset).limit(limit)
+
+    products = list((await db.scalars(query)).all())
     categories = list(
         (
             await db.scalars(
@@ -103,12 +168,19 @@ async def get_storefront(store_slug: str, db: AsyncSession = Depends(get_db)) ->
         name=store.name,
         slug=store.slug,
         description=store.description,
+        contact_phone=store.contact_phone,
         currency=store.currency,
         categories=[
-            {"public_id": item.public_id, "name": item.name, "slug": item.slug, "parent_public_id": item.parent.public_id if item.parent else None}
+            {
+                "public_id": item.public_id,
+                "name": item.name,
+                "slug": item.slug,
+                "parent_public_id": item.parent.public_id if item.parent else None,
+            }
             for item in categories
         ],
         products=[product_response(product) for product in products],
+        total_products=int(total),
     )
 
 

@@ -20,6 +20,7 @@ class Store(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     slug: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
     description: Mapped[str | None] = mapped_column(String(1000))
+    contact_phone: Mapped[str | None] = mapped_column(String(32))
     status: Mapped[str] = mapped_column(String(32), nullable=False, server_default="active")
     currency: Mapped[str] = mapped_column(String(3), nullable=False)
     sms_notifications_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="0")

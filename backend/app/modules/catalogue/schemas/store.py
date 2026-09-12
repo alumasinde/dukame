@@ -7,6 +7,7 @@ class StoreCreate(BaseModel):
     name: str = Field(min_length=2, max_length=255)
     slug: str = Field(min_length=3, max_length=100, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
     description: str | None = Field(default=None, max_length=1000)
+    contact_phone: str | None = Field(default=None, max_length=32)
     status: str = Field(min_length=1, max_length=32)
     currency: str = Field(min_length=3, max_length=3)
     sms_notifications_enabled: bool = False
@@ -16,6 +17,14 @@ class StoreCreate(BaseModel):
     @classmethod
     def normalize_name(cls, value: str) -> str:
         return value.strip()
+
+    @field_validator("contact_phone")
+    @classmethod
+    def normalize_contact_phone(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        return cleaned or None
 
     @field_validator("currency")
     @classmethod
@@ -34,6 +43,7 @@ class StoreUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=2, max_length=255)
     slug: str | None = Field(default=None, min_length=3, max_length=100, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
     description: str | None = Field(default=None, max_length=1000)
+    contact_phone: str | None = Field(default=None, max_length=32)
     status: str | None = Field(default=None, min_length=1, max_length=32)
     currency: str | None = Field(default=None, min_length=3, max_length=3)
     sms_notifications_enabled: bool | None = None
@@ -42,12 +52,30 @@ class StoreUpdate(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def reject_null_required_fields(cls, value):
-        return reject_null_fields(value, ("name", "slug", "status", "currency", "sms_notifications_enabled", "whatsapp_notifications_enabled"))
+        return reject_null_fields(
+            value,
+            (
+                "name",
+                "slug",
+                "status",
+                "currency",
+                "sms_notifications_enabled",
+                "whatsapp_notifications_enabled",
+            ),
+        )
 
     @field_validator("name")
     @classmethod
     def normalize_name(cls, value: str | None) -> str | None:
         return value.strip() if value is not None else None
+
+    @field_validator("contact_phone")
+    @classmethod
+    def normalize_contact_phone(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        return cleaned or None
 
     @field_validator("currency")
     @classmethod
@@ -73,6 +101,7 @@ class StoreResponse(BaseModel):
     name: str
     slug: str
     description: str | None
+    contact_phone: str | None = None
     status: str
     currency: str
     sms_notifications_enabled: bool = False

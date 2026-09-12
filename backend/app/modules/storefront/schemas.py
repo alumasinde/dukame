@@ -53,9 +53,11 @@ class StorefrontResponse(BaseModel):
     name: str
     slug: str
     description: str | None
+    contact_phone: str | None = None
     currency: str
     categories: list[StorefrontCategory]
     products: list[StorefrontProduct]
+    total_products: int = 0
 
 
 class StorefrontProductResponse(StorefrontProduct):
