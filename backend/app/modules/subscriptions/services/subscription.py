@@ -7,12 +7,16 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.config import settings
 from app.core.time import utc_now
 from app.modules.auth.models.identity import User
-from app.modules.subscriptions.models.subscription import Plan, Subscription, SubscriptionEvent
+from app.modules.subscriptions.models.subscription import (
+    Plan,
+    Subscription,
+    SubscriptionEvent,
+)
 from app.modules.tenancy.models.tenant import Tenant, TenantUser
 
-# Canonical subscription statuses.
 STATUS_TRIAL = "trial"
 STATUS_ACTIVE = "active"
 STATUS_PAST_DUE = "past_due"
@@ -27,25 +31,34 @@ VALID_STATUSES = {
     STATUS_EXPIRED,
 }
 
-# Allowed transitions: from_status -> set of target statuses.
 ALLOWED_TRANSITIONS: dict[str, set[str]] = {
     STATUS_TRIAL: {STATUS_ACTIVE, STATUS_CANCELLED, STATUS_EXPIRED, STATUS_TRIAL},
-    STATUS_ACTIVE: {STATUS_PAST_DUE, STATUS_CANCELLED, STATUS_EXPIRED, STATUS_ACTIVE, STATUS_TRIAL},
+    STATUS_ACTIVE: {
+        STATUS_PAST_DUE,
+        STATUS_CANCELLED,
+        STATUS_EXPIRED,
+        STATUS_ACTIVE,
+        STATUS_TRIAL,
+    },
     STATUS_PAST_DUE: {STATUS_ACTIVE, STATUS_CANCELLED, STATUS_EXPIRED},
     STATUS_CANCELLED: {STATUS_EXPIRED},
-    STATUS_EXPIRED: set(),  # terminal
+    STATUS_EXPIRED: set(),
 }
 
-VALID_INTERVALS = {
-    "monthly": "monthly_price_minor",
-    "quarterly": "quarterly_price_minor",
-    "yearly": "yearly_price_minor",
-}
+VALID_INTERVALS = ("monthly", "quarterly", "yearly")
 
-INTERVAL_DAYS = {"monthly": 30, "quarterly": 90, "yearly": 365}
-
-# Statuses that still grant plan entitlements.
 ENTITLED_STATUSES = {STATUS_TRIAL, STATUS_ACTIVE, STATUS_PAST_DUE}
+
+
+def _interval_days(interval: str) -> int:
+    mapping = {
+        "monthly": settings.billing_interval_days_monthly,
+        "quarterly": settings.billing_interval_days_quarterly,
+        "yearly": settings.billing_interval_days_yearly,
+    }
+    if interval not in mapping:
+        raise HTTPException(status_code=422, detail="Invalid billing interval")
+    return mapping[interval]
 
 
 def _assert_transition(current: str, target: str) -> None:
@@ -77,14 +90,59 @@ def _add_event(
     return event
 
 
+def interval_end(start: datetime, interval: str, trial_days: int = 0) -> datetime:
+    return start + timedelta(days=_interval_days(interval) + max(trial_days, 0))
+
+
+def is_entitled(subscription: Subscription) -> bool:
+    if subscription.status not in ENTITLED_STATUSES:
+        return False
+    if subscription.current_period_end is None:
+        return True
+    return subscription.current_period_end >= utc_now()
+
+
 async def list_active_plans(db: AsyncSession) -> list[Plan]:
     result = await db.execute(
         select(Plan)
         .options(selectinload(Plan.features))
         .where(Plan.is_active.is_(True))
-        .order_by(Plan.monthly_price_minor, Plan.name)
+        .order_by(Plan.sort_order, Plan.monthly_price_minor, Plan.name)
     )
     return list(result.scalars().unique().all())
+
+
+async def list_public_plans(db: AsyncSession) -> list[Plan]:
+    """Plans safe for the public landing / pricing page."""
+    result = await db.execute(
+        select(Plan)
+        .options(selectinload(Plan.features))
+        .where(Plan.is_active.is_(True), Plan.is_public.is_(True))
+        .order_by(Plan.sort_order, Plan.monthly_price_minor, Plan.name)
+    )
+    return list(result.scalars().unique().all())
+
+
+async def get_public_plan_by_slug(db: AsyncSession, slug: str) -> Plan | None:
+    result = await db.execute(
+        select(Plan)
+        .options(selectinload(Plan.features))
+        .where(
+            Plan.slug == slug,
+            Plan.is_active.is_(True),
+            Plan.is_public.is_(True),
+        )
+    )
+    return result.scalar_one_or_none()
+
+
+async def get_plan_by_public_id(db: AsyncSession, public_id: str) -> Plan | None:
+    result = await db.execute(
+        select(Plan)
+        .options(selectinload(Plan.features))
+        .where(Plan.public_id == public_id, Plan.is_active.is_(True))
+    )
+    return result.scalar_one_or_none()
 
 
 async def get_tenant_subscription(
@@ -104,20 +162,16 @@ async def get_tenant_subscription(
     return result.scalar_one_or_none()
 
 
-def interval_end(start: datetime, interval: str, trial_days: int = 0) -> datetime:
-    days = INTERVAL_DAYS.get(interval)
-    if days is None:
-        raise HTTPException(status_code=422, detail="Invalid billing interval")
-    return start + timedelta(days=days + trial_days)
-
-
-def is_entitled(subscription: Subscription) -> bool:
-    """Whether the subscription currently grants plan features."""
-    if subscription.status not in ENTITLED_STATUSES:
-        return False
-    if subscription.current_period_end is None:
-        return True
-    return subscription.current_period_end >= utc_now()
+async def list_subscription_events(
+    db: AsyncSession, subscription_id: int, *, limit: int = 50
+) -> list[SubscriptionEvent]:
+    result = await db.execute(
+        select(SubscriptionEvent)
+        .where(SubscriptionEvent.subscription_id == subscription_id)
+        .order_by(SubscriptionEvent.created_at.desc())
+        .limit(limit)
+    )
+    return list(result.scalars().all())
 
 
 async def change_subscription(
@@ -144,19 +198,22 @@ async def change_subscription(
             },
         )
 
-    plan = await db.scalar(
-        select(Plan)
-        .options(selectinload(Plan.features))
-        .where(Plan.public_id == plan_public_id, Plan.is_active.is_(True))
-    )
+    plan = await get_plan_by_public_id(db, plan_public_id)
     if plan is None:
         raise HTTPException(status_code=404, detail="Plan not found")
 
-    price_attr = VALID_INTERVALS[billing_interval]
-    if getattr(plan, price_attr) > 0:
+    # Paid changes are gated until the payment provider flow is wired.
+    if plan.price_for_interval(billing_interval) > 0:
         raise HTTPException(
             status_code=409,
-            detail="Paid plan changes require the payment flow",
+            detail={
+                "code": "payment_required",
+                "message": "Paid plan changes require the payment flow",
+                "plan_public_id": plan.public_id,
+                "billing_interval": billing_interval,
+                "amount_minor": plan.price_for_interval(billing_interval),
+                "currency": plan.currency,
+            },
         )
 
     old_plan_slug = subscription.plan.slug
@@ -172,6 +229,9 @@ async def change_subscription(
     start = utc_now()
     subscription.starts_at = start
     subscription.current_period_end = interval_end(start, billing_interval, plan.trial_days)
+
+    # Ensure relationship reflects the new plan for response serialization.
+    subscription.plan = plan
 
     _add_event(
         db,
@@ -216,7 +276,6 @@ async def cancel_subscription(
         subscription.cancel_at_period_end = False
         event_type = "subscription.cancelled"
     else:
-        # Schedule cancellation at period end; keep current entitled status.
         subscription.cancel_at_period_end = True
         event_type = "subscription.cancel_scheduled"
 
@@ -254,7 +313,6 @@ async def reactivate_subscription(
         )
 
     if not subscription.cancel_at_period_end:
-        # Already active with no pending cancellation — idempotent success.
         return subscription
 
     old_status = subscription.status
@@ -276,14 +334,6 @@ async def reactivate_subscription(
 
 
 async def expire_due_subscriptions(db: AsyncSession, *, batch_size: int = 200) -> int:
-    """Expire subscriptions that have passed their period end.
-
-    Rules:
-    - cancel_at_period_end=True  -> cancelled
-    - otherwise (trial/active/past_due past end) -> expired
-
-    Returns the number of subscriptions updated.
-    """
     now = utc_now()
     result = await db.execute(
         select(Subscription)
@@ -311,7 +361,6 @@ async def expire_due_subscriptions(db: AsyncSession, *, batch_size: int = 200) -
             target = STATUS_EXPIRED
             event_type = "subscription.expired"
 
-        # Skip if transition is not allowed (defensive).
         if target not in ALLOWED_TRANSITIONS.get(old_status, set()):
             continue
 
@@ -323,7 +372,9 @@ async def expire_due_subscriptions(db: AsyncSession, *, batch_size: int = 200) -
             {
                 "from_status": old_status,
                 "to_status": target,
-                "period_end": sub.current_period_end.isoformat() if sub.current_period_end else None,
+                "period_end": (
+                    sub.current_period_end.isoformat() if sub.current_period_end else None
+                ),
                 "source": "maintenance_worker",
             },
         )
