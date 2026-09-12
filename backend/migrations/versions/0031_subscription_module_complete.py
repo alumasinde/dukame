@@ -6,12 +6,12 @@ Revises: 0030_store_notification_channels
 
 from __future__ import annotations
 
+import json
 import uuid
 
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy import inspect
-from sqlalchemy.dialects import mysql
 
 revision = "0031_subscription_module"
 down_revision = "0030_store_notification_channels"
@@ -24,8 +24,12 @@ def _has_column(table: str, column: str) -> bool:
     return column in {c["name"] for c in inspect(bind).get_columns(table)}
 
 
+def _has_index(table: str, name: str) -> bool:
+    bind = op.get_bind()
+    return any(idx["name"] == name for idx in inspect(bind).get_indexes(table))
+
+
 def upgrade() -> None:
-    # --- schema: plans metadata for landing page + trials ---
     if not _has_column("plans", "trial_days"):
         op.add_column(
             "plans",
@@ -52,14 +56,14 @@ def upgrade() -> None:
             sa.Column("highlight", sa.Boolean(), server_default="0", nullable=False),
         )
 
-    op.create_index(
-        "ix_plans_public_sort",
-        "plans",
-        ["is_public", "is_active", "sort_order"],
-        unique=False,
-    )
+    if not _has_index("plans", "ix_plans_public_sort"):
+        op.create_index(
+            "ix_plans_public_sort",
+            "plans",
+            ["is_public", "is_active", "sort_order"],
+            unique=False,
+        )
 
-    # --- seed catalog (idempotent by slug). Values live in DB, not application code. ---
     plans = sa.table(
         "plans",
         sa.column("id", sa.BigInteger),
@@ -80,9 +84,10 @@ def upgrade() -> None:
     )
     features = sa.table(
         "plan_features",
+        sa.column("id", sa.BigInteger),
         sa.column("plan_id", sa.BigInteger),
         sa.column("feature_key", sa.String),
-        sa.column("value", mysql.JSON),
+        sa.column("value", sa.JSON),
     )
 
     bind = op.get_bind()
@@ -184,7 +189,9 @@ def upgrade() -> None:
 
     for item in catalog:
         slug = item["slug"]
-        feature_map = item.pop("features")
+        feature_map = item["features"]
+        payload = {k: v for k, v in item.items() if k not in {"slug", "features"}}
+
         if slug in existing:
             plan_id = existing[slug]
             bind.execute(
@@ -206,29 +213,18 @@ def upgrade() -> None:
                     WHERE id = :id
                     """
                 ),
-                {"id": plan_id, **{k: item[k] for k in item if k != "slug"}},
+                {"id": plan_id, **payload},
             )
         else:
-            public_id = uuid.uuid4().hex
             result = bind.execute(
                 plans.insert().values(
-                    public_id=public_id,
+                    public_id=uuid.uuid4().hex,
                     slug=slug,
-                    name=item["name"],
-                    description=item["description"],
-                    monthly_price_minor=item["monthly_price_minor"],
-                    quarterly_price_minor=item["quarterly_price_minor"],
-                    yearly_price_minor=item["yearly_price_minor"],
-                    currency=item["currency"],
-                    trial_days=item["trial_days"],
                     is_active=True,
                     is_public=True,
-                    sort_order=item["sort_order"],
-                    badge=item["badge"],
-                    highlight=item["highlight"],
+                    **payload,
                 )
             )
-            # MySQL lastrowid
             plan_id = result.lastrowid
             if not plan_id:
                 plan_id = bind.execute(
@@ -236,27 +232,17 @@ def upgrade() -> None:
                 ).scalar()
 
         for key, value in feature_map.items():
-            exists = bind.execute(
+            existing_feature_id = bind.execute(
                 sa.text(
                     "SELECT id FROM plan_features WHERE plan_id = :plan_id AND feature_key = :key"
                 ),
                 {"plan_id": plan_id, "key": key},
             ).scalar()
-            if exists:
+            encoded = json.dumps(value)
+            if existing_feature_id:
                 bind.execute(
-                    sa.text(
-                        "UPDATE plan_features SET value = :value WHERE id = :id"
-                    ),
-                    {"id": exists, "value": sa.literal(value) if False else None},
-                )
-                # Use JSON-safe update via SQLAlchemy table API
-                bind.execute(
-                    features.update()
-                    .where(
-                        features.c.plan_id == plan_id,
-                        features.c.feature_key == key,
-                    )
-                    .values(value=value)
+                    sa.text("UPDATE plan_features SET value = CAST(:value AS JSON) WHERE id = :id"),
+                    {"id": existing_feature_id, "value": encoded},
                 )
             else:
                 bind.execute(
@@ -267,8 +253,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index("ix_plans_public_sort", table_name="plans")
+    if _has_index("plans", "ix_plans_public_sort"):
+        op.drop_index("ix_plans_public_sort", table_name="plans")
     for col in ("highlight", "badge", "is_public", "sort_order"):
         if _has_column("plans", col):
             op.drop_column("plans", col)
-    # Keep trial_days — model depends on it; safer not to drop if app is live.
