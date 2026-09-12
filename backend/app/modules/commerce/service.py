@@ -29,6 +29,7 @@ from app.modules.commerce.notifications import queue_order_sms
 from app.modules.commerce.payment_service import PaymentService
 from app.modules.commerce.schemas import CartItemAdd, CartItemUpdate, CheckoutRequest, OrderStatusUpdate
 from app.modules.commerce.tracking import tracking_token, tracking_token_hash
+from app.modules.rbac.services.rbac import require_permission
 
 
 class CommerceService:
@@ -174,7 +175,7 @@ class CommerceService:
         return order
 
     async def update_order_status(self, user: User, tenant_public_id: str, public_id: str, payload: OrderStatusUpdate) -> Order:
-        store = await resolve_store(self.db, user, tenant_public_id, "orders.status.manage")
+        store = await resolve_store(self.db, user, tenant_public_id, "orders.read")
         order = await self._load_order_by_public_id(store.id, public_id, lock=True)
         if order is None:
             raise HTTPException(status_code=404, detail="Order not found")
@@ -185,9 +186,17 @@ class CommerceService:
             raise HTTPException(status_code=422, detail="Order status not found")
         if status.id == order.status_id:
             raise HTTPException(status_code=409, detail="Order is already in this status")
-        transition = await self.db.scalar(select(OrderStatusTransition).where(OrderStatusTransition.from_status_id == order.status_id, OrderStatusTransition.to_status_id == status.id))
-        if transition is None:
-            raise HTTPException(status_code=409, detail=f"Order cannot move from {order.status.name} to {status.name}")
+        transition = await self.db.scalar(
+            select(OrderStatusTransition)
+            .options(selectinload(OrderStatusTransition.permission))
+            .where(
+                OrderStatusTransition.from_status_id == order.status_id,
+                OrderStatusTransition.to_status_id == status.id,
+            )
+        )
+        if transition is None or transition.permission is None:
+            raise HTTPException(status_code=409, detail="The requested order transition is not configured")
+        await require_permission(self.db, user, store.tenant_id, transition.permission.key)
         order.status_id = status.id
         self.db.add(OrderStatusHistory(order_id=order.id, status_id=status.id, actor_user_id=user.id, source="merchant"))
         await queue_order_sms(self.db, order, status, store.name, store.slug)
