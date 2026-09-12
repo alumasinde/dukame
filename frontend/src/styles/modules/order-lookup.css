@@ -1,0 +1,72 @@
+/* Order lookup (phone + order number) */
+.order-lookup-page .order-lookup-shell {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 28px 16px 48px;
+}
+.order-lookup-card {
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #e8e8e8);
+  border-radius: 16px;
+  padding: 28px 24px;
+  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.06);
+}
+.order-lookup-card h1 {
+  margin: 8px 0 10px;
+  font-size: 1.55rem;
+  letter-spacing: -0.02em;
+}
+.order-lookup-card > p {
+  margin: 0 0 22px;
+  color: var(--muted, #64748b);
+  line-height: 1.5;
+  font-size: 0.95rem;
+}
+.order-lookup-form {
+  display: grid;
+  gap: 16px;
+}
+.order-lookup-form label {
+  display: grid;
+  gap: 6px;
+}
+.order-lookup-form label > span {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text, #0f172a);
+}
+.order-lookup-form input {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 10px;
+  font-size: 1rem;
+  background: #fff;
+}
+.order-lookup-form input:focus {
+  outline: 2px solid var(--primary, #0f766e);
+  outline-offset: 1px;
+  border-color: transparent;
+}
+.order-lookup-note {
+  margin: 20px 0 0;
+  font-size: 0.82rem;
+  color: var(--muted, #64748b);
+  line-height: 1.45;
+}
+.order-lookup-note span {
+  display: block;
+}
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 100;
+  padding: 8px 14px;
+  background: #0f172a;
+  color: #fff;
+  border-radius: 0 0 8px 0;
+}
+.skip-link:focus {
+  left: 0;
+}
