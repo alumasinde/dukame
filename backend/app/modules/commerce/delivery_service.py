@@ -24,13 +24,9 @@ class DeliveryService:
 
     async def get_or_create(self, user: User, tenant_public_id: str, order_public_id: str) -> OrderDelivery:
         store = await resolve_store(self.db, user, tenant_public_id, "orders.read")
-        order = await self._order(store.id, order_public_id, lock=False)
-        if order is None:
-            raise HTTPException(status_code=404, detail="Order not found")
-        delivery = await self.db.scalar(select(OrderDelivery).where(OrderDelivery.order_id == order.id))
+        delivery = await self._delivery(store.id, order_public_id, lock=True)
         if delivery is None:
-            delivery = OrderDelivery(public_id=secrets.token_hex(16), store_id=store.id, order_id=order.id, status="pending")
-            self.db.add(delivery)
+            delivery = await self._create_locked(store, order_public_id)
             await self.db.commit()
             await self.db.refresh(delivery)
         return delivery
