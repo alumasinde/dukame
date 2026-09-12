@@ -41,6 +41,15 @@ class CustomerService:
             raise HTTPException(status_code=404, detail="Customer not found")
         return result
 
+    async def orders(
+        self, user: User, tenant_public_id: str, public_id: str, offset: int, limit: int
+    ) -> list:
+        store = await resolve_store(self.db, user, tenant_public_id, "customers.read")
+        customer = await self.repository.get(store.id, public_id)
+        if customer is None:
+            raise HTTPException(status_code=404, detail="Customer not found")
+        return await self.repository.list_orders(store.id, customer.id, offset, limit)
+
     async def create(
         self, user: User, tenant_public_id: str, payload: CustomerCreate
     ) -> tuple[Customer, int]:
