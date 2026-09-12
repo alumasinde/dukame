@@ -27,6 +27,7 @@ const selectedCategoryItem = computed(() => selectedCategory.value ? categoryMap
 const childCategories = computed(() => selectedCategory.value ? (store.value?.categories || []).filter(category => category.parent_public_id === selectedCategory.value) : [])
 const heroProducts = computed(() => (store.value?.products || []).filter(product => product.media.length).slice(0, 3))
 const favoriteSet = computed(() => new Set(favorites.value))
+const showStickyCart = computed(() => (cartState.itemCount.value || 0) > 0 && !showCartDrawer.value)
 
 function categoryAndAncestors(categoryId: string): Set<string> {
   const ids = new Set<string>(); let current = categoryMap.value.get(categoryId); const visited = new Set<string>()
@@ -70,6 +71,25 @@ async function changeProductQuantity(product: StorefrontProduct, delta: number) 
   finally { quantityBusy.value = '' }
 }
 
+async function changeDrawerQuantity(itemId: string, nextQuantity: number) {
+  if (quantityBusy.value) return
+  quantityBusy.value = itemId
+  addError.value = ''
+  try {
+    if (nextQuantity < 1) {
+      const response = await removeCartItem(storeSlug.value, itemId)
+      cartState.update(storeSlug.value, response.data)
+    } else {
+      const response = await updateCartItem(storeSlug.value, itemId, nextQuantity)
+      cartState.update(storeSlug.value, response.data)
+    }
+  } catch (err: any) {
+    addError.value = err?.response?.data?.detail || 'We could not update your cart.'
+  } finally {
+    quantityBusy.value = ''
+  }
+}
+
 watch(storeSlug, () => { try { const saved = JSON.parse(localStorage.getItem(favoriteKey()) || '[]'); favorites.value = Array.isArray(saved) ? saved : [] } catch { favorites.value = [] } })
 
 onMounted(async () => {
@@ -106,7 +126,15 @@ onMounted(async () => {
       </section>
       <footer class="storefront-footer">{{ store.name }} · Powered by DukaMe</footer>
 
-      <Teleport to="body"><div v-if="showCartDrawer" class="storefront-cart-drawer-backdrop" @click="closeDrawer" /><aside v-if="showCartDrawer" class="storefront-cart-drawer" aria-label="Shopping cart"><div class="storefront-cart-drawer-head"><div><strong>Your cart</strong><span v-if="cartState.itemCount.value" style="display:block;color:var(--muted);font-size:10px;margin-top:3px">{{ cartState.itemCount.value }} {{ cartState.itemCount.value === 1 ? 'item' : 'items' }}</span></div><button type="button" class="storefront-drawer-close" aria-label="Close cart" @click="closeDrawer">×</button></div><div class="storefront-cart-drawer-body"><article v-for="item in cartState.cart.value?.items || []" :key="item.public_id" class="storefront-mini-cart-item"><div class="storefront-mini-cart-image"><img v-if="item.image_url" :src="item.image_url" :alt="item.product_name" /></div><div class="storefront-mini-cart-copy"><strong>{{ item.product_name }}</strong><small v-if="item.variant_label">{{ item.variant_label }}</small><div class="storefront-mini-cart-price"><span>{{ item.quantity }} × {{ money(item.unit_price_minor, item.currency) }}</span><strong>{{ money(item.line_total_minor, item.currency) }}</strong></div></div></article><div v-if="!cartState.cart.value?.items.length" class="storefront-empty" style="min-height:240px"><div class="storefront-empty-icon">—</div><h2>Your cart is empty</h2></div></div><div class="storefront-cart-drawer-foot"><div class="storefront-drawer-total"><span>Subtotal</span><strong>{{ money(cartState.cart.value?.subtotal_minor || 0, cartState.cart.value?.currency || store.currency) }}</strong></div><div class="storefront-drawer-actions"><button type="button" class="button button-secondary" @click="closeDrawer">Continue shopping</button><RouterLink :to="`/${store.slug}/cart`" class="button button-primary" @click="closeDrawer">Go to cart</RouterLink></div><p class="storefront-drawer-note">Secure checkout · Your payment details are handled by the selected payment provider.</p></div></aside></Teleport>
+      <RouterLink v-if="showStickyCart" :to="`/${store.slug}/cart`" class="storefront-sticky-cart" aria-label="Open cart and checkout">
+        <div class="storefront-sticky-cart-copy">
+          <strong>{{ money(cartState.cart.value?.subtotal_minor || 0, cartState.cart.value?.currency || store.currency) }}</strong>
+          <span>{{ cartState.itemCount.value }} {{ cartState.itemCount.value === 1 ? 'item' : 'items' }} in cart</span>
+        </div>
+        <span class="storefront-sticky-cart-cta">Checkout →</span>
+      </RouterLink>
+
+      <Teleport to="body"><div v-if="showCartDrawer" class="storefront-cart-drawer-backdrop" @click="closeDrawer" /><aside v-if="showCartDrawer" class="storefront-cart-drawer" aria-label="Shopping cart"><div class="storefront-cart-drawer-head"><div><strong>Your cart</strong><span v-if="cartState.itemCount.value" style="display:block;color:var(--muted);font-size:10px;margin-top:3px">{{ cartState.itemCount.value }} {{ cartState.itemCount.value === 1 ? 'item' : 'items' }}</span></div><button type="button" class="storefront-drawer-close" aria-label="Close cart" @click="closeDrawer">×</button></div><div class="storefront-cart-drawer-body"><article v-for="item in cartState.cart.value?.items || []" :key="item.public_id" class="storefront-mini-cart-item"><div class="storefront-mini-cart-image"><img v-if="item.image_url" :src="item.image_url" :alt="item.product_name" /></div><div class="storefront-mini-cart-copy"><strong>{{ item.product_name }}</strong><small v-if="item.variant_label">{{ item.variant_label }}</small><div class="storefront-mini-cart-price"><span>{{ money(item.unit_price_minor, item.currency) }} each</span><strong>{{ money(item.line_total_minor, item.currency) }}</strong></div><div class="storefront-mini-cart-actions"><div class="storefront-quantity" :class="{ disabled: quantityBusy === item.public_id }"><button type="button" aria-label="Decrease quantity" :disabled="quantityBusy === item.public_id" @click="changeDrawerQuantity(item.public_id, item.quantity - 1)">−</button><span aria-live="polite">{{ item.quantity }}</span><button type="button" aria-label="Increase quantity" :disabled="quantityBusy === item.public_id" @click="changeDrawerQuantity(item.public_id, item.quantity + 1)">+</button></div><button type="button" class="storefront-mini-remove" :disabled="quantityBusy === item.public_id" @click="changeDrawerQuantity(item.public_id, 0)">Remove</button></div></div></article><div v-if="!cartState.cart.value?.items.length" class="storefront-empty" style="min-height:240px"><div class="storefront-empty-icon">—</div><h2>Your cart is empty</h2></div></div><div class="storefront-cart-drawer-foot"><div class="storefront-drawer-total"><span>Subtotal</span><strong>{{ money(cartState.cart.value?.subtotal_minor || 0, cartState.cart.value?.currency || store.currency) }}</strong></div><div class="storefront-drawer-actions"><button type="button" class="button button-secondary" @click="closeDrawer">Continue shopping</button><RouterLink :to="`/${store.slug}/cart`" class="button button-primary" @click="closeDrawer">Checkout</RouterLink></div><p class="storefront-drawer-note">Secure checkout · Never share your M-Pesa PIN with anyone.</p></div></aside></Teleport>
     </template>
   </main>
 </template>

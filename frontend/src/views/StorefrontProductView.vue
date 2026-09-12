@@ -10,6 +10,7 @@ const cartState = useCartState()
 const storeSlug = String(route.params.storeSlug)
 const product = ref<StorefrontProduct | null>(null)
 const storeName = ref('')
+const storeCurrency = ref('KES')
 const loading = ref(true)
 const adding = ref(false)
 const added = ref(false)
@@ -27,6 +28,7 @@ const selectedVariant = computed(() => { const variants = product.value?.variant
 const selectedVariantUnavailable = computed(() => !!product.value?.variants.length && (!selectedVariant.value || (selectedVariant.value.inventory_tracking && selectedVariant.value.inventory_quantity <= 0)))
 const simpleProductUnavailable = computed(() => !!product.value && !product.value.variants.length && product.value.inventory_tracking && product.value.inventory_quantity <= 0)
 const displayPrice = computed(() => selectedVariant.value?.price_minor ?? product.value?.price_minor ?? 0)
+const showStickyCart = computed(() => (cartState.itemCount.value || 0) > 0)
 
 function money(minor: number, currency: string) { return new Intl.NumberFormat('en-KE', { style: 'currency', currency, maximumFractionDigits: 2 }).format(minor / 100) }
 function setOption(optionId: string, valueId: string) { selectedOptions[optionId] = valueId; added.value = false; error.value = '' }
@@ -42,7 +44,7 @@ async function addToCart() {
   finally { adding.value = false }
 }
 
-onMounted(async () => { try { const [productResponse, storeResponse] = await Promise.all([getStorefrontProduct(storeSlug, String(route.params.productSlug)), getStorefront(storeSlug), cartState.load(storeSlug)]); product.value = productResponse.data; storeName.value = storeResponse.data.name; document.title = `${product.value.name} · ${storeName.value}`; for (const group of optionGroups.value) selectedOptions[group.public_id] = group.values[0]?.public_id || '' } catch (err: any) { error.value = err?.response?.data?.detail || 'This product could not be found.' } finally { loading.value = false } })
+onMounted(async () => { try { const [productResponse, storeResponse] = await Promise.all([getStorefrontProduct(storeSlug, String(route.params.productSlug)), getStorefront(storeSlug), cartState.load(storeSlug)]); product.value = productResponse.data; storeName.value = storeResponse.data.name; storeCurrency.value = storeResponse.data.currency; document.title = `${product.value.name} · ${storeName.value}`; for (const group of optionGroups.value) selectedOptions[group.public_id] = group.values[0]?.public_id || '' } catch (err: any) { error.value = err?.response?.data?.detail || 'This product could not be found.' } finally { loading.value = false } })
 </script>
 
 <template>
@@ -67,6 +69,14 @@ onMounted(async () => { try { const [productResponse, storeResponse] = await Pro
           </article>
         </div>
       </section>
+
+      <RouterLink v-if="showStickyCart" :to="`/${storeSlug}/cart`" class="storefront-sticky-cart" aria-label="Open cart and checkout">
+        <div class="storefront-sticky-cart-copy">
+          <strong>{{ money(cartState.cart.value?.subtotal_minor || 0, cartState.cart.value?.currency || storeCurrency) }}</strong>
+          <span>{{ cartState.itemCount.value }} {{ cartState.itemCount.value === 1 ? 'item' : 'items' }} in cart</span>
+        </div>
+        <span class="storefront-sticky-cart-cta">Checkout →</span>
+      </RouterLink>
     </template>
   </main>
 </template>

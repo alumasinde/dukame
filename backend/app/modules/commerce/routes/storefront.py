@@ -8,8 +8,8 @@ from app.modules.catalogue.models.variant import ProductVariant
 from app.modules.catalogue.models.store import Store
 from app.modules.commerce.models.cart import Cart
 from app.modules.commerce.models.order import Order
-from app.modules.commerce.payment_service import payment_response
-from app.modules.commerce.schemas import CartItemAdd, CartItemUpdate, CartResponse, CheckoutRequest, OrderResponse, OrderStatusHistoryResponse, OrderStatusResponse, OrderTrackingResponse
+from app.modules.commerce.payment_service import PaymentService, payment_response
+from app.modules.commerce.schemas import CartItemAdd, CartItemUpdate, CartResponse, CheckoutRequest, OrderResponse, OrderStatusHistoryResponse, OrderStatusResponse, OrderTrackingResponse, PaymentResponse
 from app.modules.commerce.service import CommerceService
 from app.modules.commerce.tracking import tracking_token as make_tracking_token
 from app.modules.commerce.tracking import tracking_url
@@ -112,3 +112,37 @@ async def track_order(store_slug: str, tracking_token_value: str, db: AsyncSessi
     store = await get_store(db, store_slug)
     order = await CommerceService(db).get_public_order(store, tracking_token_value)
     return tracking_response(order, store)
+
+
+@router.post(
+    "/{store_slug}/order/track/{tracking_token_value}/payment/retry",
+    response_model=PaymentResponse,
+)
+async def retry_tracked_payment(
+    store_slug: str,
+    tracking_token_value: str,
+    db: AsyncSession = Depends(get_db),
+) -> PaymentResponse:
+    """Customer STK retry authorized by the order tracking token (no login)."""
+    store = await get_store(db, store_slug)
+    order = await CommerceService(db).get_public_order(store, tracking_token_value)
+    if order.payment is None:
+        raise HTTPException(status_code=404, detail="Payment not found")
+    payment = order.payment
+    if payment.payment_method is None or payment.payment_method.code != "mpesa":
+        raise HTTPException(status_code=422, detail="Only M-Pesa STK payments can be retried here")
+    if payment.status not in {"failed", "pending", "processing"}:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "payment_not_retryable", "status": payment.status},
+        )
+    # Force failed so initiate() path is allowed for stuck processing as well.
+    if payment.status == "processing":
+        payment.status = "failed"
+        payment.failure_reason = payment.failure_reason or "Customer requested a new M-Pesa prompt"
+        await db.flush()
+    elif payment.status == "pending":
+        payment.status = "failed"
+        await db.flush()
+    updated = await PaymentService(db).initiate(payment.public_id)
+    return PaymentResponse.model_validate(payment_response(updated))
