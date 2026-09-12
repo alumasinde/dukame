@@ -8,7 +8,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.auth.models.identity import User
 from app.modules.catalogue.models.product import Product
-from app.modules.catalogue.models.store import Store
 from app.modules.catalogue.models.variant import ProductVariant
 from app.modules.catalogue.services.context import resolve_store
 from app.modules.commerce.audit_service import record_audit
@@ -95,7 +94,11 @@ class InventoryService:
             entity_type="product_variant" if variant else "product",
             entity_public_id=variant.public_id if variant else product.public_id,
             before={"inventory_quantity": before},
-            after={"inventory_quantity": after, "movement_type": movement_type, "reason": reason.strip() if reason else None},
+            after={
+                "inventory_quantity": after,
+                "movement_type": movement_type,
+                "reason": reason.strip() if reason else None,
+            },
         )
         await self.db.commit()
         return movement
