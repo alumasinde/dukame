@@ -5,6 +5,7 @@ import { useCartState } from './cart-state'
 import { loadFavorites, toggleFavorite as toggleFavoriteStore } from './favorites'
 import { clearRecentSearches, loadRecentSearches, pushRecentSearch } from './recent-search'
 import { whatsappContactUrl } from './share'
+import { APP_NAME } from './branding'
 import {
   getStorefront,
   isNewProduct,
@@ -72,7 +73,7 @@ export function useStorefrontShop() {
     store.value?.contact_phone
       ? whatsappContactUrl(
           store.value.contact_phone,
-          `Hi ${store.value.name}! I saw your shop on DukaMe.`,
+          `Hi ${store.value.name}! I saw your shop on ${APP_NAME}.`,
         )
       : null,
   )

@@ -4,10 +4,10 @@ from sqlalchemy import BigInteger, ForeignKey, Index, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
+from app.modules.rbac.models.rbac import Permission
 
 if TYPE_CHECKING:
     from app.modules.commerce.models.order_status import OrderStatus
-    from app.modules.rbac.models.rbac import Permission
 
 
 class OrderStatusTransition(Base):

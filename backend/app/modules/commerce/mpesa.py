@@ -9,7 +9,7 @@ import httpx
 from fastapi import HTTPException
 
 from app.core.config import settings
-from app.modules.commerce.notifications import normalize_phone
+from app.modules.commerce.notification_channels import phone_digits
 
 logger = logging.getLogger(__name__)
 
@@ -27,8 +27,7 @@ class MpesaProviderError(RuntimeError):
 
 def mpesa_msisdn(phone: str) -> str:
     """Normalize to Safaricom STK MSISDN (2547… / 2541…)."""
-    normalized = normalize_phone(phone or "")
-    digits = "".join(ch for ch in normalized if ch.isdigit())
+    digits = phone_digits(phone or "")
     if digits.startswith("0") and len(digits) == 10:
         digits = "254" + digits[1:]
     if digits.startswith("254") and len(digits) == 12 and _MSISDN_RE.match(digits):
@@ -157,7 +156,7 @@ class MpesaClient:
         password = base64.b64encode(f"{self.shortcode}{self.passkey}{timestamp}".encode()).decode()
         reference = (account_reference or self.account_reference).strip()[:12]
         if not reference:
-            reference = "DukaMe"
+            reference = settings.app_name[:12]
         body = {
             "BusinessShortCode": self.shortcode,
             "Password": password,

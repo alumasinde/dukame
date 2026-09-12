@@ -38,6 +38,8 @@ docker compose -f docker-compose.dev.yml up --build
 
 # 2. Migrations (new terminal)
 docker compose -f docker-compose.dev.yml run --rm api alembic upgrade head
+docker compose -f docker-compose.dev.yml run --rm api alembic current
+docker compose -f docker-compose.dev.yml run --rm api alembic check
 
 # 3. Frontend (new terminal)
 cd frontend
@@ -53,9 +55,15 @@ Open: `http://dukamedev.local:5173`
 
 | Task | Command |
 |---|---|
-| Run backend tests | `docker compose -f docker-compose.dev.yml run --rm api pytest` |
-| Rebuild image (new deps) | `docker compose -f docker-compose.dev.yml build --no-cache api` |
-| Stop everything | `docker compose -f docker-compose.dev.yml down` |
+| Run backend tests | 
+docker compose -f docker-compose.dev.yml run --rm api pytest
+
+| Rebuild image (new deps) | 
+docker compose -f docker-compose.dev.yml build --no-cache api
+
+| Stop everything | 
+docker compose -f docker-compose.dev.yml down
+
 | Tail API logs | `docker compose -f docker-compose.dev.yml logs -f api` |
 | Tail worker logs | `docker compose -f docker-compose.dev.yml logs -f worker` |
 | Shell into API container | `docker compose -f docker-compose.dev.yml exec api sh` |

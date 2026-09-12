@@ -6,6 +6,7 @@ import { useCartState } from '../lib/cart-state'
 import { isFavorite as checkFavorite, toggleFavorite as toggleFavoriteStore } from '../lib/favorites'
 import { productShareText, shareContent, whatsappShareUrl } from '../lib/share'
 import { getStorefront, getStorefrontProduct, isNewProduct, relatedProducts, type StorefrontProduct } from '../lib/storefront'
+import { APP_NAME } from '../lib/branding'
 
 const route = useRoute()
 const cartState = useCartState()
@@ -100,7 +101,7 @@ onMounted(async () => {
       <header class="storefront-header">
         <RouterLink :to="`/${storeSlug}`" class="storefront-brand storefront-brand-link">
           <span class="storefront-mark">{{ storeName ? storeName.charAt(0).toUpperCase() : 'S' }}</span>
-          <div><strong>{{ storeName || 'Your store' }}</strong><small>Powered by DukaMe</small></div>
+          <div><strong>{{ storeName || 'Your store' }}</strong><small>Powered by {{ APP_NAME }}</small></div>
         </RouterLink>
         <div class="storefront-header-actions">
           <RouterLink :to="`/${storeSlug}/favourites" class="storefront-header-link storefront-fav-badge" aria-label="Favourites">♥</RouterLink>

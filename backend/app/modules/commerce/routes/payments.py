@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.modules.auth.models.identity import User
 from app.modules.auth.security import get_current_user
@@ -22,6 +23,26 @@ from app.modules.commerce.mpesa import MpesaClient, MpesaProviderError, validate
 from app.modules.storefront.routes import get_active_store
 
 router = APIRouter(tags=["payments"])
+
+
+def _validate_mpesa_paybill_config(config: dict) -> tuple[str, str, str, str]:
+    """Returns (payment_type, number, account_mode, account_reference), raises 422 on invalid input."""
+    payment_type = str(config.get("payment_type", "paybill")).strip().lower()
+    if payment_type not in {"paybill", "till"}:
+        raise HTTPException(status_code=422, detail="Choose Paybill or Till Number")
+    number_key = "paybill_number" if payment_type == "paybill" else "till_number"
+    number = str(config.get(number_key, "")).strip()
+    if not number.isdigit() or not 5 <= len(number) <= 8:
+        raise HTTPException(status_code=422, detail=f"Enter a valid M-Pesa {'Paybill' if payment_type == 'paybill' else 'Till Number'}")
+    account_mode = str(config.get("account_mode", "order_number")).strip()
+    account_reference = str(config.get("account_reference", "")).strip()
+    if payment_type == "till":
+        account_mode, account_reference = "none", ""
+    elif account_mode not in {"order_number", "customer_reference", "fixed"}:
+        raise HTTPException(status_code=422, detail="Invalid Paybill account mode")
+    if payment_type == "paybill" and account_mode == "fixed" and not account_reference:
+        raise HTTPException(status_code=422, detail="Enter the fixed account reference")
+    return payment_type, number, account_mode, account_reference
 
 
 def method_response(method: PaymentMethod, callback_url: str | None = None, callback_token: str | None = None, merchant: bool = False) -> PaymentMethodResponse:
@@ -59,25 +80,11 @@ async def create_payment_method(tenant_public_id: str, payload: PaymentMethodCre
     store = await resolve_store(db, user, tenant_public_id, "payments.manage")
     if normalized_code == "mpesa_paybill":
         config = payload.config or {}
-        payment_type = str(config.get("payment_type", "paybill")).strip().lower()
-        if payment_type not in {"paybill", "till"}:
-            raise HTTPException(status_code=422, detail="Choose Paybill or Till Number")
-        number_key = "paybill_number" if payment_type == "paybill" else "till_number"
-        number = str(config.get(number_key, "")).strip()
-        if not number.isdigit() or not 5 <= len(number) <= 8:
-            raise HTTPException(status_code=422, detail=f"Enter a valid M-Pesa {'Paybill' if payment_type == 'paybill' else 'Till Number'}")
+        payment_type, number, account_mode, account_reference = _validate_mpesa_paybill_config(config)
         if await db.scalar(select(PaymentMethod.id).where(PaymentMethod.store_id == store.id, PaymentMethod.code == normalized_code, PaymentMethod.payment_type == payment_type)):
             raise HTTPException(status_code=409, detail=f"M-Pesa {payment_type} is already configured")
-        account_mode = str(config.get("account_mode", "order_number")).strip()
-        account_reference = str(config.get("account_reference", "")).strip()
-        if payment_type == "paybill" and account_mode not in {"order_number", "customer_reference", "fixed"}:
-            raise HTTPException(status_code=422, detail="Invalid Paybill account mode")
-        if payment_type == "till":
-            account_mode, account_reference = "none", ""
-        if payment_type == "paybill" and account_mode == "fixed" and not account_reference:
-            raise HTTPException(status_code=422, detail="Enter the fixed account reference")
         label = "M-Pesa Paybill" if payment_type == "paybill" else "M-Pesa Till"
-        instructions = payload.instructions.strip() if payload.instructions else (f"Pay via M-Pesa Paybill {number}. Use your DukaMe order number as the account reference." if payment_type == "paybill" else f"Pay via M-Pesa Buy Goods and Services using Till Number {number}.")
+        instructions = payload.instructions.strip() if payload.instructions else (f"Pay via M-Pesa Paybill {number}. Use your {settings.app_name} order number as the account reference." if payment_type == "paybill" else f"Pay via M-Pesa Buy Goods and Services using Till Number {number}.")
         encrypted = encrypt_config({"payment_type": payment_type, "paybill_number": number if payment_type == "paybill" else "", "till_number": number if payment_type == "till" else "", "account_mode": account_mode, "account_reference": account_reference})
         method = PaymentMethod(public_id=secrets.token_hex(16), store_id=store.id, code=normalized_code, name=payload.name.strip() or label, is_enabled=payload.is_enabled, sort_order=20, instructions=instructions, config_encrypted=encrypted, payment_type=payment_type)
         db.add(method)
@@ -110,24 +117,11 @@ async def update_payment_method(tenant_public_id: str, method_public_id: str, pa
             method.is_enabled = payload.is_enabled
         if payload.config is not None:
             merged = {**current, **payload.config}
-            payment_type = str(merged.get("payment_type", method.payment_type or "paybill")).strip().lower()
-            if payment_type not in {"paybill", "till"}:
-                raise HTTPException(status_code=422, detail="Choose Paybill or Till Number")
-            number_key = "paybill_number" if payment_type == "paybill" else "till_number"
-            number = str(merged.get(number_key, "")).strip()
-            if not number.isdigit() or not 5 <= len(number) <= 8:
-                raise HTTPException(status_code=422, detail=f"Enter a valid M-Pesa {'Paybill' if payment_type == 'paybill' else 'Till Number'}")
+            merged.setdefault("payment_type", method.payment_type or "paybill")
+            payment_type, number, account_mode, account_reference = _validate_mpesa_paybill_config(merged)
             existing = await db.scalar(select(PaymentMethod.id).where(PaymentMethod.store_id == store.id, PaymentMethod.code == "mpesa_paybill", PaymentMethod.payment_type == payment_type, PaymentMethod.id != method.id))
             if existing is not None:
                 raise HTTPException(status_code=409, detail=f"M-Pesa {payment_type} is already configured")
-            account_mode = str(merged.get("account_mode", "order_number"))
-            account_reference = str(merged.get("account_reference", "")).strip()
-            if payment_type == "till":
-                account_mode, account_reference = "none", ""
-            elif account_mode not in {"order_number", "customer_reference", "fixed"}:
-                raise HTTPException(status_code=422, detail="Invalid Paybill account mode")
-            if payment_type == "paybill" and account_mode == "fixed" and not account_reference:
-                raise HTTPException(status_code=422, detail="Enter the fixed account reference")
             merged.update({"payment_type": payment_type, "paybill_number": number if payment_type == "paybill" else "", "till_number": number if payment_type == "till" else "", "account_mode": account_mode, "account_reference": account_reference})
             method.config_encrypted = encrypt_config(merged)
             method.payment_type = payment_type

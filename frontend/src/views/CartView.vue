@@ -5,6 +5,7 @@ import { checkoutCart, getPaymentMethods, getOrderTracking, removeCartItem, upda
 import { useCartState } from '../lib/cart-state'
 import { formatKenyaPhoneDisplay, kenyaPhoneError, normalizeKenyaPhone } from '../lib/phone'
 import { getStorefront } from '../lib/storefront'
+import { APP_NAME } from '../lib/branding'
 
 const route = useRoute()
 const storeSlug = String(route.params.storeSlug)
@@ -96,7 +97,7 @@ onMounted(async () => { try { const [storeResponse] = await Promise.all([getStor
 
 <template>
   <main class="storefront-page" style="padding-bottom: 40px">
-    <header class="storefront-header"><RouterLink :to="`/${storeSlug}`" class="storefront-brand storefront-brand-link"><span class="storefront-mark">{{ storeName ? storeName.charAt(0).toUpperCase() : 'S' }}</span><div><strong>{{ storeName || 'Your store' }}</strong><small>Powered by DukaMe</small></div></RouterLink><RouterLink :to="`/${storeSlug}`" class="storefront-cart storefront-cart-link">Continue shopping</RouterLink></header>
+    <header class="storefront-header"><RouterLink :to="`/${storeSlug}`" class="storefront-brand storefront-brand-link"><span class="storefront-mark">{{ storeName ? storeName.charAt(0).toUpperCase() : 'S' }}</span><div><strong>{{ storeName || 'Your store' }}</strong><small>Powered by {{ APP_NAME }}</small></div></RouterLink><RouterLink :to="`/${storeSlug}`" class="storefront-cart storefront-cart-link">Continue shopping</RouterLink></header>
     <section class="storefront-cart-page">
       <div v-if="loading" class="storefront-state"><div class="status-spinner" /><p>Loading your cart…</p></div>
       <div v-else-if="order" class="storefront-order-success"><div class="storefront-success-icon">✓</div><span class="storefront-eyebrow">Order received</span><h1>Thank you, {{ order.customer_first_name }}.</h1><p>Your order <strong>#{{ order.order_number }}</strong> has been received. We'll keep you updated as the store processes it.</p><div class="storefront-success-summary"><div><span>Payment</span><strong>{{ order.payment?.status === 'paid' ? 'Paid' : order.payment?.status === 'processing' ? 'Payment pending' : order.payment?.status === 'failed' ? 'Payment failed' : 'Payment pending' }}</strong></div><div><span>Total</span><strong>{{ money(order.total_minor, order.currency) }}</strong></div><div><span>Items</span><strong>{{ order.items.reduce((sum, item) => sum + item.quantity, 0) }}</strong></div></div><div v-if="paymentMessage" class="storefront-payment-result" :class="`is-${order.payment?.status || 'pending'}`"><strong>{{ order.payment?.method.name }}</strong><p>{{ paymentMessage }}</p><button v-if="order.payment?.status === 'processing'" type="button" @click="refreshPaymentStatus">Check payment status</button></div><div class="storefront-success-actions"><RouterLink v-if="trackingPath" :to="trackingPath" class="button button-primary button-lg">Track my order</RouterLink><RouterLink :to="`/${storeSlug}`" class="button button-secondary">Continue shopping</RouterLink></div><p class="storefront-success-notice">Your tracking page will show payment confirmation and order progress. Save that link.</p></div>
@@ -144,7 +145,7 @@ onMounted(async () => { try { const [storeResponse] = await Promise.all([getStor
             <button class="button button-secondary" type="button" @click="checkoutStep = 'payment'">Back</button>
             <button class="button button-primary button-lg" type="button" :disabled="submitting" @click="submitOrder">{{ submitting ? 'Placing order…' : `Place order · ${money(cart.subtotal_minor, cart.currency)}` }}</button>
           </div>
-          <div class="storefront-secure-note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></svg>Never share your M-Pesa PIN · DukaMe will never ask for it</div>
+          <div class="storefront-secure-note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></svg>Never share your M-Pesa PIN · {{ APP_NAME }} will never ask for it</div>
         </section>
         <div v-if="!cart.items.length" class="storefront-empty storefront-cart-empty"><div class="storefront-empty-icon" aria-hidden="true">—</div><h2>Your cart is empty</h2><p>Add a product to your cart and it will appear here.</p><RouterLink :to="`/${storeSlug}`" class="button button-primary">Browse products</RouterLink></div>
       </template>

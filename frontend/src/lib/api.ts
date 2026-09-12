@@ -1,4 +1,5 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios'
+import { APP_NAME } from './branding'
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1'
 
@@ -14,7 +15,7 @@ const refreshClient = axios.create({
   headers: { 'Content-Type': 'application/json' },
 })
 
-if (import.meta.env.DEV) console.log('[DukaMe API] Base URL:', apiBaseUrl)
+if (import.meta.env.DEV) console.log(`[${APP_NAME} API] Base URL:`, apiBaseUrl)
 
 let refreshPromise: Promise<string | null> | null = null
 
@@ -67,7 +68,7 @@ api.interceptors.response.use(
   async (error: AxiosError) => {
     const original = error.config as RetriableRequest | undefined
     if (import.meta.env.DEV && !error.response) {
-      console.error('[DukaMe API] Network error:', { message: error.message, code: error.code, config: { baseURL: error.config?.baseURL, url: error.config?.url } })
+      console.error(`[${APP_NAME} API] Network error:`, { message: error.message, code: error.code, config: { baseURL: error.config?.baseURL, url: error.config?.url } })
     }
     if (error.response?.status !== 401 || !original || original._retry || !getRefreshToken() || original.url?.endsWith('/auth/refresh')) return Promise.reject(error)
     original._retry = true

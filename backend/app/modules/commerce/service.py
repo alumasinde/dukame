@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
+from app.core.time import ensure_utc
 from app.modules.auth.models.identity import User
 from app.modules.catalogue.models.option_value import ProductOptionValue
 from app.modules.catalogue.models.product import Product
@@ -43,12 +44,6 @@ class CommerceService:
         self.db = db
 
     @staticmethod
-    def _ensure_tz_aware(dt: datetime | None) -> datetime | None:
-        if dt is None:
-            return None
-        return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
-
-    @staticmethod
     def _idempotency_hash(payload: object) -> str:
         encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
         return hashlib.sha256(encoded).hexdigest()
@@ -78,7 +73,7 @@ class CommerceService:
             cart = await self._cart_by_token(store.id, token, lock=False)
             now = datetime.now(UTC)
             if cart is not None and cart.checked_out_at is None:
-                expires_at = self._ensure_tz_aware(cart.expires_at)
+                expires_at = ensure_utc(cart.expires_at)
                 if expires_at > now:
                     return cart, token, False
         raw_token = secrets.token_urlsafe(32)
@@ -186,7 +181,7 @@ class CommerceService:
             if existing is not None:
                 return await self._load_order_by_public_id(store.id, existing.resource_public_id)
         now = datetime.now(UTC)
-        expires_at = self._ensure_tz_aware(cart.expires_at)
+        expires_at = ensure_utc(cart.expires_at)
         if cart.checked_out_at is not None or expires_at is None or expires_at <= now:
             raise HTTPException(status_code=409, detail="Your cart has expired. Please start a new cart.")
         items = list((await self.db.scalars(select(CartItem).options(selectinload(CartItem.product).selectinload(Product.media), selectinload(CartItem.variant).selectinload(ProductVariant.option_value_links).selectinload(ProductVariantOptionValue.option_value).selectinload(ProductOptionValue.option)).where(CartItem.cart_id == cart.id).with_for_update())).all())
@@ -366,7 +361,7 @@ class CommerceService:
     async def _require_cart(self, store_id: int, token: str) -> Cart:
         cart = await self._cart_by_token(store_id, token, lock=True)
         now = datetime.now(UTC)
-        expires_at = self._ensure_tz_aware(cart.expires_at) if cart else None
+        expires_at = ensure_utc(cart.expires_at) if cart else None
         if cart is None or cart.checked_out_at is not None or expires_at is None or expires_at <= now:
             raise HTTPException(status_code=409, detail="Your cart has expired. Please start a new cart.")
         return cart

@@ -81,7 +81,7 @@ async def register(
     await db.commit()
     await _send_auth_email(
         user.email,
-        "Verify your DukaMe account",
+        f"Verify your {settings.app_name} account",
         f"Verify your account: {_frontend_url('verify-email', token)}",
     )
     await db.refresh(user)
@@ -113,7 +113,7 @@ async def resend_verification(
         await db.commit()
         await _send_auth_email(
             user.email,
-            "Verify your DukaMe account",
+            f"Verify your {settings.app_name} account",
             f"Verify your account: {_frontend_url('verify-email', token)}",
         )
     return MessageResponse(
@@ -135,7 +135,7 @@ async def forgot_password(
         await db.commit()
         await _send_auth_email(
             user.email,
-            "Reset your DukaMe password",
+            f"Reset your {settings.app_name} password",
             f"Reset your password: {_frontend_url('reset-password', token)}",
         )
     return MessageResponse(

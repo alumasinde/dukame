@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { getBusinessTypes, type BusinessType } from '../lib/business-types'
 import { getStorefrontDisplayBase } from '../lib/storefront-url'
+import { APP_NAME, APP_MARK } from '../lib/branding'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -54,9 +55,9 @@ onMounted(async () => {
 
 <template>
   <main class="onboarding-page">
-    <div class="onboarding-brand"><span class="brand-mark">D</span><strong>DukaMe</strong></div>
+    <div class="onboarding-brand"><span class="brand-mark">{{ APP_MARK }}</span><strong>{{ APP_NAME }}</strong></div>
     <section class="onboarding-card" aria-labelledby="onboarding-title">
-      <div class="onboarding-heading"><span class="eyebrow">Get started</span><h1 id="onboarding-title">Set up your business</h1><p>Tell us what you sell so DukaMe can shape your selling experience around your business.</p></div>
+      <div class="onboarding-heading"><span class="eyebrow">Get started</span><h1 id="onboarding-title">Set up your business</h1><p>Tell us what you sell so {{ APP_NAME }} can shape your selling experience around your business.</p></div>
       <div v-if="error" class="alert alert-danger" role="alert">{{ error }}</div>
       <form class="onboarding-form" @submit.prevent="submit" novalidate>
         <label class="field-group"><span>Business name</span><input v-model="businessName" type="text" autocomplete="organization" maxlength="255" placeholder="e.g. Best Collections" required autofocus /></label>

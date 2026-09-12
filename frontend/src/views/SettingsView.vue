@@ -4,6 +4,7 @@ import { useAuthStore } from '../stores/auth'
 import { catalogueApi, type Store } from '../lib/catalogue'
 import { getRequestId } from '../lib/api'
 import PaymentsView from './PaymentsView.vue'
+import { APP_NAME } from '../lib/branding'
 
 const auth = useAuthStore()
 const user = computed(() => auth.user)
@@ -112,7 +113,7 @@ onMounted(() => {
         <div class="panel-heading">
           <div>
             <h3>Profile</h3>
-            <p>Your identity is used across DukaMe workspaces.</p>
+            <p>Your identity is used across {{ APP_NAME }} workspaces.</p>
           </div>
         </div>
         <div class="profile-large">
@@ -182,7 +183,7 @@ onMounted(() => {
       <div class="panel-heading">
         <div>
           <h3>Order notifications</h3>
-          <p>Choose how customers get order updates. Messaging is provided by DukaMe — no provider setup here.</p>
+          <p>Choose how customers get order updates. Messaging is provided by {{ APP_NAME }} — no provider setup here.</p>
         </div>
         <button class="button button-secondary" type="button" :disabled="loading || saving || !store" @click="loadStore">Refresh</button>
       </div>
@@ -196,7 +197,7 @@ onMounted(() => {
           <div class="notifications-icon" aria-hidden="true">SMS</div>
           <div class="notifications-copy">
             <strong>SMS updates</strong>
-            <span>Text messages for order status changes (when DukaMe SMS is available).</span>
+            <span>Text messages for order status changes (when {{ APP_NAME }} SMS is available).</span>
           </div>
           <label class="notifications-toggle">
             <input v-model="smsEnabled" type="checkbox" :disabled="saving" />
@@ -208,7 +209,7 @@ onMounted(() => {
           <div class="notifications-icon notifications-icon-wa" aria-hidden="true">WA</div>
           <div class="notifications-copy">
             <strong>WhatsApp updates</strong>
-            <span>Utility messages for order updates (when DukaMe WhatsApp is available). Customers must opt in where required.</span>
+            <span>Utility messages for order updates (when {{ APP_NAME }} WhatsApp is available). Customers must opt in where required.</span>
           </div>
           <label class="notifications-toggle">
             <input v-model="whatsappEnabled" type="checkbox" :disabled="saving" />

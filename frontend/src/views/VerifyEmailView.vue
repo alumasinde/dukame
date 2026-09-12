@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import { api } from '../lib/api'
+import { APP_NAME, APP_MARK } from '../lib/branding'
 
 const route = useRoute()
 const status = ref('Verifying your email…')
@@ -29,7 +30,7 @@ onMounted(async () => {
 
 <template>
   <main class="auth-page">
-    <div class="auth-brand"><span class="brand-mark">D</span><strong>DukaMe</strong></div>
+    <div class="auth-brand"><span class="brand-mark">{{ APP_MARK }}</span><strong>{{ APP_NAME }}</strong></div>
     <section class="auth-card centered-card" aria-labelledby="verification-title" :aria-busy="loading">
       <div class="status-icon" :class="{ success }">
         <span v-if="loading" class="status-spinner" aria-hidden="true"></span>

@@ -1,15 +1,12 @@
 from datetime import datetime
-from typing import TYPE_CHECKING
 
 from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
-
-if TYPE_CHECKING:
-    from app.modules.auth.models.identity import User
-    from app.modules.rbac.models.rbac import TenantRole
-    from app.modules.tenancy.models.business_type import BusinessType
+from app.modules.auth.models.identity import User
+from app.modules.rbac.models.rbac import TenantRole
+from app.modules.tenancy.models.business_type import BusinessType
 
 
 class Tenant(Base):

@@ -4,6 +4,7 @@ import { RouterLink, useRoute } from 'vue-router'
 import { useCartState } from '../lib/cart-state'
 import { loadFavorites, toggleFavorite as toggleFavoriteStore } from '../lib/favorites'
 import { getStorefront, type Storefront, type StorefrontProduct } from '../lib/storefront'
+import { APP_NAME } from '../lib/branding'
 
 const route = useRoute()
 const cartState = useCartState()
@@ -50,13 +51,13 @@ onMounted(async () => {
       <div class="storefront-empty-icon">!</div>
       <h1>Store unavailable</h1>
       <p>{{ error }}</p>
-      <RouterLink to="/login" class="button button-primary">Go to DukaMe</RouterLink>
+      <RouterLink to="/login" class="button button-primary">Go to {{ APP_NAME }}</RouterLink>
     </div>
     <template v-else-if="store">
       <header class="storefront-header">
         <RouterLink :to="`/${store.slug}`" class="storefront-brand storefront-brand-link">
           <span class="storefront-mark">{{ store.name.charAt(0).toUpperCase() }}</span>
-          <div><strong>{{ store.name }}</strong><small>Powered by DukaMe</small></div>
+          <div><strong>{{ store.name }}</strong><small>Powered by {{ APP_NAME }}</small></div>
         </RouterLink>
         <div class="storefront-header-actions">
           <RouterLink :to="`/${store.slug}/favourites`" class="storefront-header-link storefront-fav-badge" aria-label="Favourites">
@@ -109,7 +110,7 @@ onMounted(async () => {
           <RouterLink :to="`/${store.slug}`" class="button button-primary">Browse the store</RouterLink>
         </div>
       </section>
-      <footer class="storefront-footer">{{ store.name }} · Powered by DukaMe</footer>
+      <footer class="storefront-footer">{{ store.name }} · Powered by {{ APP_NAME }}</footer>
     </template>
   </main>
 </template>

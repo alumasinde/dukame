@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { api } from '../lib/api'
+import { APP_NAME, APP_MARK } from '../lib/branding'
 
 const route = useRoute()
 const router = useRouter()
@@ -49,13 +50,13 @@ async function reset() {
 
 <template>
   <main class="auth-page">
-    <div class="auth-brand"><span class="brand-mark">D</span><strong>DukaMe</strong></div>
+    <div class="auth-brand"><span class="brand-mark">{{ APP_MARK }}</span><strong>{{ APP_NAME }}</strong></div>
 
     <section class="auth-card" aria-labelledby="reset-title" :aria-busy="loading">
       <div class="auth-heading">
         <span class="badge">Account security</span>
         <h1 id="reset-title">{{ mode ? 'Set a new password' : 'Reset your password' }}</h1>
-        <p>{{ mode ? 'Choose a strong password for your DukaMe account.' : 'Enter your email and we’ll send a secure reset link if the account exists.' }}</p>
+        <p>{{ mode ? `Choose a strong password for your ${APP_NAME} account.` : 'Enter your email and we’ll send a secure reset link if the account exists.' }}</p>
       </div>
 
       <div v-if="error" class="alert alert-danger" role="alert">{{ error }}</div>

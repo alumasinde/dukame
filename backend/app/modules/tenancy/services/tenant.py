@@ -21,9 +21,39 @@ from app.modules.tenancy.models.tenant import Tenant, TenantUser
 DEFAULT_ROLES = (("Owner", "owner"), ("Administrator", "admin"), ("Manager", "manager"), ("Staff", "staff"))
 DEFAULT_ROLE_PERMISSIONS = {
     "owner": None,
-    "admin": {"tenant.read", "tenant.manage", "members.read", "members.manage", "roles.read", "roles.manage", "subscription.read", "account.read", "account.manage", "payments.read", "payments.manage"},
-    "manager": {"tenant.read", "members.read", "roles.read", "subscription.read", "account.read", "payments.read", "payments.manage"},
-    "staff": {"tenant.read", "account.read", "payments.read"},
+    "admin": {
+        "tenant.read", "tenant.manage",
+        "members.read", "members.manage",
+        "roles.read", "roles.manage",
+        "subscription.read",
+        "account.read", "account.manage",
+        "payments.read", "payments.manage",
+        "catalogue.read", "catalogue.manage",
+        "orders.read", "orders.confirm", "orders.cancel", "orders.process", "orders.ready", "orders.complete", "orders.history.read", "orders.export",
+        "inventory.adjust",
+        "delivery.assign", "delivery.otp.issue", "delivery.confirm",
+        "customers.read", "customers.manage",
+    },
+    "manager": {
+        "tenant.read",
+        "members.read",
+        "roles.read",
+        "subscription.read",
+        "account.read",
+        "payments.read", "payments.manage",
+        "catalogue.read", "catalogue.manage",
+        "orders.read", "orders.confirm", "orders.cancel", "orders.process", "orders.ready", "orders.complete", "orders.history.read", "orders.export",
+        "inventory.adjust",
+        "delivery.assign", "delivery.otp.issue", "delivery.confirm",
+        "customers.read", "customers.manage",
+    },
+    "staff": {
+        "tenant.read",
+        "account.read",
+        "payments.read",
+        "catalogue.read",
+        "orders.read",
+    },
 }
 
 

@@ -115,7 +115,7 @@ class PaymentService:
         await self.db.commit()
         try:
             order_number = getattr(payment.order, "order_number", None) if payment.order is not None else None
-            account_reference = str(order_number or config.get("account_reference") or "DukaMe").strip()[:12]
+            account_reference = str(order_number or config.get("account_reference") or settings.app_name).strip()[:12]
             result = await client.stk_push(payment.amount_minor, phone, account_reference)
         except (MpesaProviderError, HTTPException) as exc:
             payment = await self._load_payment(payment.public_id)
