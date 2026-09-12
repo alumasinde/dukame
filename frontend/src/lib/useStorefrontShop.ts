@@ -5,6 +5,7 @@ import { useCartState } from './cart-state'
 import { loadFavorites, toggleFavorite as toggleFavoriteStore } from './favorites'
 import { clearRecentSearches, loadRecentSearches, pushRecentSearch } from './recent-search'
 import { whatsappContactUrl } from './share'
+import { loadSavedCart, clearSavedCart, saveCartSnapshot, type SavedCart } from './saved-cart'
 import {
   getStorefront,
   isNewProduct,
@@ -37,6 +38,11 @@ export function useStorefrontShop() {
   const recentSearches = ref<string[]>([])
   const showRecent = ref(false)
   const inStockOnly = ref(false)
+  const savedCart = ref<SavedCart | null>(null)
+  const storeClosed = ref(false)
+  const closedStoreName = ref('')
+  const restoringCart = ref(false)
+  const saveCartNote = ref('')
   let searchDebounce: ReturnType<typeof setTimeout> | undefined
   let addedTimer: ReturnType<typeof setTimeout> | undefined
 
@@ -307,16 +313,77 @@ export function useStorefrontShop() {
   async function load() {
     try {
       const slug = storeSlug.value
+      storeClosed.value = false
+      closedStoreName.value = ''
       const [response] = await Promise.all([getStorefront(slug), cartState.load(slug)])
       store.value = response.data
       document.title = response.data.name
       favorites.value = loadFavorites(slug)
       recentSearches.value = loadRecentSearches(slug)
+      savedCart.value = loadSavedCart(slug)
       applyCategoryFromRoute()
     } catch (err: any) {
-      error.value = err?.response?.data?.detail || 'This store could not be found.'
+      const detail = err?.response?.data?.detail
+      if (detail && typeof detail === 'object' && detail.code === 'store_closed') {
+        storeClosed.value = true
+        closedStoreName.value = detail.store_name || ''
+        error.value = detail.message || 'This store is temporarily closed.'
+        document.title = closedStoreName.value ? `${closedStoreName.value} · Closed` : 'Store closed'
+      } else {
+        error.value = typeof detail === 'string' ? detail : 'This store could not be found.'
+      }
     } finally {
       loading.value = false
+    }
+  }
+
+  function persistCartLocally() {
+    const cart = cartState.cart.value
+    if (!cart?.items?.length) {
+      saveCartNote.value = 'Your cart is empty — nothing to save.'
+      return
+    }
+    savedCart.value = saveCartSnapshot(
+      storeSlug.value,
+      cart.items.map((item) => ({
+        product_public_id: item.product_public_id,
+        product_name: item.product_name,
+        product_slug: item.product_slug,
+        variant_public_id: item.variant_public_id,
+        variant_label: item.variant_label,
+        quantity: item.quantity,
+        unit_price_minor: item.unit_price_minor,
+        image_url: item.image_url,
+        currency: item.currency,
+      })),
+    )
+    saveCartNote.value = 'Cart saved on this device. You can restore it when you return.'
+  }
+
+  function dismissSavedCart() {
+    clearSavedCart(storeSlug.value)
+    savedCart.value = null
+    saveCartNote.value = ''
+  }
+
+  async function restoreSavedCart() {
+    const snapshot = savedCart.value
+    if (!snapshot?.items.length || restoringCart.value) return
+    restoringCart.value = true
+    addError.value = ''
+    try {
+      for (const item of snapshot.items) {
+        await cartState.quickAdd(storeSlug.value, item.product_public_id, item.quantity)
+      }
+      await cartState.load(storeSlug.value, true)
+      showCartDrawer.value = true
+      saveCartNote.value = 'Your saved items were added back to the cart.'
+    } catch (err: any) {
+      addError.value =
+        err?.response?.data?.detail ||
+        'Some saved items could not be restored. Products may be unavailable.'
+    } finally {
+      restoringCart.value = false
     }
   }
 
@@ -347,6 +414,11 @@ export function useStorefrontShop() {
     recentSearches,
     showRecent,
     inStockOnly,
+    savedCart,
+    storeClosed,
+    closedStoreName,
+    restoringCart,
+    saveCartNote,
     storeSlug,
     topLevelCategories,
     selectedCategoryItem,
@@ -383,5 +455,8 @@ export function useStorefrontShop() {
     load,
     isNewProduct,
     clearRecentSearches,
+    persistCartLocally,
+    dismissSavedCart,
+    restoreSavedCart,
   }
 }
