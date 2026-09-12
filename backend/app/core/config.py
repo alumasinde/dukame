@@ -6,7 +6,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", case_sensitive=False, extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", case_sensitive=False, extra="ignore"
+    )
     app_name: str = "DukaMe API"
     app_version: str = "0.2.0"
     environment: str = "development"
@@ -28,14 +30,41 @@ class Settings(BaseSettings):
     refresh_token_ttl_seconds: int = Field(default=2592000, ge=3600, le=31536000)
     refresh_token_bytes: int = Field(default=32, ge=32, le=128)
     default_plan_slug: str = "free"
+    default_billing_currency: str = Field(default="KES", min_length=3, max_length=3)
+    billing_intervals: list[str] = Field(
+        default_factory=lambda: ["monthly", "quarterly", "yearly"]
+    )
+    billing_interval_days_monthly: int = Field(default=30, ge=1, le=366)
+    billing_interval_days_quarterly: int = Field(default=90, ge=1, le=400)
+    billing_interval_days_yearly: int = Field(default=365, ge=1, le=400)
+    subscription_invoice_due_days: int = Field(default=3, ge=0, le=30)
+    subscription_renewal_lead_days: int = Field(default=3, ge=0, le=30)
+    # Platform (DukaMe SaaS) M-Pesa — used for subscription billing, not store orders.
+    platform_mpesa_enabled: bool = False
+    platform_mpesa_consumer_key: str | None = None
+    platform_mpesa_consumer_secret: SecretStr | None = None
+    platform_mpesa_shortcode: str | None = None
+    platform_mpesa_passkey: SecretStr | None = None
+    platform_mpesa_environment: str = "sandbox"
+    platform_mpesa_transaction_type: str = "CustomerPayBillOnline"
+    platform_mpesa_account_reference: str = "DukaMe"
+    platform_mpesa_transaction_desc: str = "Subscription"
     media_root: str = "uploads"
     media_max_bytes: int = Field(default=5 * 1024 * 1024, ge=1024, le=25 * 1024 * 1024)
     cart_session_ttl_seconds: int = Field(default=2592000, ge=3600, le=31536000)
     cart_item_max_quantity: int = Field(default=1000, ge=1, le=100000)
     delivery_otp_ttl_minutes: int = Field(default=15, ge=1, le=120)
     delivery_otp_max_attempts: int = Field(default=5, ge=1, le=20)
-    trusted_hosts: list[str] = Field(default_factory=lambda: ["localhost", "127.0.0.1", "dukamedev.local"])
-    cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173", "http://127.0.0.1:5173", "http://dukamedev.local:5173"])
+    trusted_hosts: list[str] = Field(
+        default_factory=lambda: ["localhost", "127.0.0.1", "dukamedev.local"]
+    )
+    cors_origins: list[str] = Field(
+        default_factory=lambda: [
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+            "http://dukamedev.local:5173",
+        ]
+    )
     frontend_base_url: str = "http://dukamedev.local:5173"
     public_api_base_url: str = "http://dukamedev.local:8000"
     payment_encryption_key: SecretStr | None = None
@@ -56,7 +85,9 @@ class Settings(BaseSettings):
     notification_max_attempts: int = Field(default=5, ge=1, le=20)
     notification_lease_seconds: int = Field(default=60, ge=30, le=600)
     notification_max_backoff_seconds: int = Field(default=300, ge=5, le=86400)
-    notification_worker_id: str = Field(default_factory=lambda: secrets.token_hex(16), min_length=1, max_length=64)
+    notification_worker_id: str = Field(
+        default_factory=lambda: secrets.token_hex(16), min_length=1, max_length=64
+    )
     maintenance_interval_seconds: int = Field(default=300, ge=30, le=86400)
 
     @field_validator("environment")
@@ -66,6 +97,11 @@ class Settings(BaseSettings):
         if value not in allowed:
             raise ValueError(f"environment must be one of {sorted(allowed)}")
         return value
+
+    @field_validator("default_billing_currency")
+    @classmethod
+    def validate_currency(cls, value: str) -> str:
+        return value.upper()
 
     @property
     def is_production(self) -> bool:
