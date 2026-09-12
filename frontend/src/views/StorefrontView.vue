@@ -1,160 +1,20 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
-import { RouterLink, useRoute, useRouter } from 'vue-router'
-import { removeCartItem, updateCartItem } from '../lib/cart'
-import { useCartState } from '../lib/cart-state'
-import { loadFavorites, toggleFavorite as toggleFavoriteStore } from '../lib/favorites'
-import { whatsappContactUrl } from '../lib/share'
-import { getStorefront, type Storefront, type StorefrontCategory, type StorefrontProduct, type StorefrontSort } from '../lib/storefront'
+import { onMounted } from 'vue'
+import { RouterLink } from 'vue-router'
+import { useStorefrontShop } from '../lib/useStorefrontShop'
 
-const PAGE_SIZE = 24
+const {
+  store, loading, error, selectedCategory, searchQuery, searchInput, sortBy, page,
+  addingProduct, addedProduct, addError, quantityBusy, showCartDrawer, favorites,
+  recentSearches, showRecent, inStockOnly, storeSlug, topLevelCategories, selectedCategoryItem,
+  childCategories, heroProducts, showStickyCart, whatsappUrl, totalFiltered, totalPages,
+  pagedProducts, resultLabel, cartState, money, image, hasDiscount, categoryCount, hasVariants,
+  isAvailable, cartItemFor, isFavorite, toggleFavorite, closeDrawer, onSearchInput, commitSearch,
+  applyRecent, clearSearch, clearAllFilters, suggestedCategories, selectCategory, addProduct,
+  changeProductQuantity, changeDrawerQuantity, load, isNewProduct, clearRecentSearches,
+} = useStorefrontShop()
 
-const route = useRoute()
-const router = useRouter()
-const cartState = useCartState()
-const store = ref<Storefront | null>(null)
-const loading = ref(true)
-const error = ref('')
-const selectedCategory = ref('')
-const searchQuery = ref('')
-const sortBy = ref<StorefrontSort>('featured')
-const page = ref(1)
-const addingProduct = ref('')
-const addedProduct = ref('')
-const addError = ref('')
-const quantityBusy = ref('')
-const showCartDrawer = ref(false)
-const favorites = ref<string[]>([])
-let addedTimer: ReturnType<typeof setTimeout> | undefined
-
-const storeSlug = computed(() => String(route.params.storeSlug))
-const categorySlugParam = computed(() => (route.name === 'storefront-category' ? String(route.params.categorySlug || '') : ''))
-const categoryMap = computed(() => new Map((store.value?.categories || []).map(category => [category.public_id, category])))
-const categoryBySlug = computed(() => new Map((store.value?.categories || []).map(category => [category.slug, category])))
-const topLevelCategories = computed(() => (store.value?.categories || []).filter(category => !category.parent_public_id))
-const selectedCategoryItem = computed(() => selectedCategory.value ? categoryMap.value.get(selectedCategory.value) || null : null)
-const childCategories = computed(() => selectedCategory.value ? (store.value?.categories || []).filter(category => category.parent_public_id === selectedCategory.value) : [])
-const heroProducts = computed(() => (store.value?.products || []).filter(product => product.media.length).slice(0, 3))
-const favoriteSet = computed(() => new Set(favorites.value))
-const showStickyCart = computed(() => (cartState.itemCount.value || 0) > 0 && !showCartDrawer.value)
-const whatsappUrl = computed(() => store.value?.contact_phone ? whatsappContactUrl(store.value.contact_phone, `Hi ${store.value.name}! I saw your shop on DukaMe.`) : null)
-
-function categoryAndAncestors(categoryId: string): Set<string> {
-  const ids = new Set<string>(); let current = categoryMap.value.get(categoryId); const visited = new Set<string>()
-  while (current && !visited.has(current.public_id)) { visited.add(current.public_id); ids.add(current.public_id); current = current.parent_public_id ? categoryMap.value.get(current.parent_public_id) : undefined }
-  return ids
-}
-function belongsToCategory(product: StorefrontProduct, categoryId: string) { return !!product.category && categoryAndAncestors(product.category.public_id).has(categoryId) }
-const categoryCounts = computed(() => { const counts = new Map<string, number>(); for (const product of store.value?.products || []) { if (!product.category) continue; for (const id of categoryAndAncestors(product.category.public_id)) counts.set(id, (counts.get(id) || 0) + 1) } return counts })
-
-const filteredProducts = computed(() => {
-  const query = searchQuery.value.trim().toLowerCase()
-  let list = (store.value?.products || []).filter(product => {
-    if (selectedCategory.value && !belongsToCategory(product, selectedCategory.value)) return false
-    if (!query) return true
-    return [product.name, product.description || '', product.category?.name || ''].some(value => value.toLowerCase().includes(query))
-  })
-  if (sortBy.value === 'price_asc') list = [...list].sort((a, b) => a.price_minor - b.price_minor)
-  else if (sortBy.value === 'price_desc') list = [...list].sort((a, b) => b.price_minor - a.price_minor)
-  else if (sortBy.value === 'newest') list = [...list] // API already newest-first; keep order
-  return list
-})
-
-const totalFiltered = computed(() => filteredProducts.value.length)
-const totalPages = computed(() => Math.max(1, Math.ceil(totalFiltered.value / PAGE_SIZE)))
-const pagedProducts = computed(() => {
-  const start = (page.value - 1) * PAGE_SIZE
-  return filteredProducts.value.slice(start, start + PAGE_SIZE)
-})
-const resultLabel = computed(() => selectedCategoryItem.value ? selectedCategoryItem.value.name : searchQuery.value.trim() ? `Results for “${searchQuery.value.trim()}”` : 'All products')
-
-function money(minor: number, currency: string) { return new Intl.NumberFormat('en-KE', { style: 'currency', currency, maximumFractionDigits: 2 }).format(minor / 100) }
-function image(product: StorefrontProduct) { return product.media[0]?.url || '' }
-function hasDiscount(product: StorefrontProduct) { return product.compare_at_price_minor != null && product.compare_at_price_minor > product.price_minor }
-function categoryCount(category: StorefrontCategory) { return categoryCounts.value.get(category.public_id) || 0 }
-function hasVariants(product: StorefrontProduct) { return product.variants.length > 0 }
-function isAvailable(product: StorefrontProduct) { return product.variants.length ? product.variants.some(variant => !variant.inventory_tracking || variant.inventory_quantity > 0) : !product.inventory_tracking || product.inventory_quantity > 0 }
-function cartItemFor(product: StorefrontProduct) { return cartState.cart.value?.items.find(item => item.product_public_id === product.public_id && !item.variant_public_id) || null }
-function isFavorite(productId: string) { return favoriteSet.value.has(productId) }
-function toggleFavorite(productId: string) { favorites.value = toggleFavoriteStore(storeSlug.value, productId) }
-function closeDrawer() { showCartDrawer.value = false }
-
-function selectCategory(id: string) {
-  selectedCategory.value = id
-  page.value = 1
-  const cat = id ? categoryMap.value.get(id) : null
-  if (cat) {
-    router.push({ name: 'storefront-category', params: { storeSlug: storeSlug.value, categorySlug: cat.slug } })
-  } else {
-    router.push({ name: 'storefront', params: { storeSlug: storeSlug.value } })
-  }
-  const section = document.querySelector('.storefront-products-section')
-  if (section) window.scrollTo({ top: window.scrollY + section.getBoundingClientRect().top - 82, behavior: 'smooth' })
-}
-
-function applyCategoryFromRoute() {
-  const slug = categorySlugParam.value
-  if (!slug || !store.value) { if (!slug) selectedCategory.value = ''; return }
-  const match = categoryBySlug.value.get(slug)
-  selectedCategory.value = match?.public_id || ''
-}
-
-async function addProduct(product: StorefrontProduct) {
-  if (hasVariants(product) || !isAvailable(product) || addingProduct.value || quantityBusy.value) return
-  addingProduct.value = product.public_id; addError.value = ''
-  try { await cartState.quickAdd(storeSlug.value, product.public_id); addedProduct.value = product.public_id; showCartDrawer.value = true; if (addedTimer) clearTimeout(addedTimer); addedTimer = setTimeout(() => { addedProduct.value = '' }, 2200) }
-  catch (err: any) { addError.value = err?.response?.data?.detail || 'We could not add that product. Please try again.' }
-  finally { addingProduct.value = '' }
-}
-
-async function changeProductQuantity(product: StorefrontProduct, delta: number) {
-  const item = cartItemFor(product); if (!item || quantityBusy.value || !isAvailable(product)) return
-  const nextQuantity = item.quantity + delta
-  if (nextQuantity < 1) { quantityBusy.value = item.public_id; try { const response = await removeCartItem(storeSlug.value, item.public_id); cartState.update(storeSlug.value, response.data) } catch (err: any) { addError.value = err?.response?.data?.detail || 'We could not update your cart.' } finally { quantityBusy.value = '' }; return }
-  if (product.inventory_tracking && nextQuantity > product.inventory_quantity) return
-  quantityBusy.value = item.public_id
-  try { const response = await updateCartItem(storeSlug.value, item.public_id, nextQuantity); cartState.update(storeSlug.value, response.data) }
-  catch (err: any) { addError.value = err?.response?.data?.detail || 'We could not update your cart.' }
-  finally { quantityBusy.value = '' }
-}
-
-async function changeDrawerQuantity(itemId: string, nextQuantity: number) {
-  if (quantityBusy.value) return
-  quantityBusy.value = itemId
-  addError.value = ''
-  try {
-    if (nextQuantity < 1) {
-      const response = await removeCartItem(storeSlug.value, itemId)
-      cartState.update(storeSlug.value, response.data)
-    } else {
-      const response = await updateCartItem(storeSlug.value, itemId, nextQuantity)
-      cartState.update(storeSlug.value, response.data)
-    }
-  } catch (err: any) {
-    addError.value = err?.response?.data?.detail || 'We could not update your cart.'
-  } finally {
-    quantityBusy.value = ''
-  }
-}
-
-watch(storeSlug, () => { favorites.value = loadFavorites(storeSlug.value) })
-watch([searchQuery, sortBy, selectedCategory], () => { page.value = 1 })
-watch(categorySlugParam, () => applyCategoryFromRoute())
-
-onMounted(async () => {
-  try {
-    const slug = storeSlug.value
-    const [response] = await Promise.all([getStorefront(slug), cartState.load(slug)])
-    store.value = response.data
-    document.title = response.data.name
-    favorites.value = loadFavorites(slug)
-    applyCategoryFromRoute()
-  } catch (err: any) {
-    error.value = err?.response?.data?.detail || 'This store could not be found.'
-  } finally {
-    loading.value = false
-  }
-})
+onMounted(() => { void load() })
 </script>
 
 <template>
@@ -168,7 +28,7 @@ onMounted(async () => {
           <div><strong>{{ store.name }}</strong><small>Powered by DukaMe</small></div>
         </RouterLink>
         <div class="storefront-header-actions">
-          <a v-if="whatsappUrl" class="storefront-header-link is-wa" :href="whatsappUrl" target="_blank" rel="noopener noreferrer">WhatsApp</a>
+          <a v-if="whatsappUrl" class="storefront-header-link is-wa" :href="whatsappUrl" target="_blank" rel="noopener noreferrer" title="Chat on WhatsApp"><span aria-hidden="true">WA</span><span class="wa-label">WhatsApp</span></a>
           <RouterLink :to="`/${store.slug}/favourites`" class="storefront-header-link storefront-fav-badge" aria-label="Favourites">
             ♥<span v-if="favorites.length">{{ favorites.length }}</span>
           </RouterLink>
@@ -186,7 +46,6 @@ onMounted(async () => {
             <p>{{ store.description || 'Discover products you will love, add them to your cart and checkout in a few simple steps.' }}</p>
             <div class="storefront-trust">
               <a v-if="whatsappUrl" class="storefront-trust-wa" :href="whatsappUrl" target="_blank" rel="noopener noreferrer">Chat on WhatsApp</a>
-              <RouterLink class="storefront-trust-track" :to="`/${store.slug}/cart`">Track an order →</RouterLink>
             </div>
           </div>
           <div v-if="heroProducts.length" class="storefront-hero-visual" aria-hidden="true">
@@ -205,14 +64,42 @@ onMounted(async () => {
             <h2>{{ resultLabel }}</h2>
             <p>{{ totalFiltered }} product{{ totalFiltered === 1 ? '' : 's' }}</p>
           </div>
-          <label class="storefront-search" aria-label="Search products">
-            <span aria-hidden="true">⌕</span>
-            <input v-model="searchQuery" type="search" placeholder="Search products…" autocomplete="off" />
-            <button v-if="searchQuery" type="button" aria-label="Clear search" @click="searchQuery = ''">×</button>
-          </label>
+          <div class="storefront-search-wrap">
+            <label class="storefront-search" aria-label="Search products">
+              <span aria-hidden="true">⌕</span>
+              <input
+                :value="searchInput"
+                type="search"
+                placeholder="Search products…"
+                autocomplete="off"
+                @input="onSearchInput(($event.target as HTMLInputElement).value)"
+                @focus="showRecent = recentSearches.length > 0"
+                @keydown.enter.prevent="commitSearch"
+                @blur="setTimeout(() => { showRecent = false }, 180)"
+              />
+              <button v-if="searchInput" type="button" aria-label="Clear search" @mousedown.prevent="clearSearch">×</button>
+            </label>
+            <div v-if="showRecent && recentSearches.length" class="storefront-recent" role="listbox">
+              <div class="storefront-recent-head">
+                <span>Recent</span>
+                <button type="button" @mousedown.prevent="clearRecentSearches(storeSlug); recentSearches = []">Clear</button>
+              </div>
+              <button v-for="q in recentSearches" :key="q" type="button" class="item" @mousedown.prevent="applyRecent(q)">{{ q }}</button>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="selectedCategoryItem" class="storefront-category-banner">
+          <span class="storefront-eyebrow">Category</span>
+          <h2>{{ selectedCategoryItem.name }}</h2>
+          <p v-if="selectedCategoryItem.description">{{ selectedCategoryItem.description }}</p>
+          <p v-else>{{ totalFiltered }} product{{ totalFiltered === 1 ? '' : 's' }} in this category</p>
         </div>
 
         <div class="storefront-toolbar">
+          <button type="button" class="storefront-filter-chip" :class="{ active: inStockOnly }" @click="inStockOnly = !inStockOnly">
+            {{ inStockOnly ? 'In stock only ✓' : 'In stock only' }}
+          </button>
           <label class="storefront-sort">
             Sort
             <select v-model="sortBy">
@@ -248,7 +135,8 @@ onMounted(async () => {
                 <RouterLink :to="`/${store.slug}/products/${product.slug}`" class="storefront-product-link">
                   <img v-if="image(product)" :src="image(product)" :alt="product.media[0]?.alt_text || product.name" loading="lazy" />
                   <span v-else>No image</span>
-                  <span v-if="hasDiscount(product)" class="storefront-sale-badge">Sale</span>
+                  <span v-if="isNewProduct(product)" class="storefront-new-badge">New</span>
+                  <span v-if="hasDiscount(product)" class="storefront-sale-badge" :class="{ 'with-new': isNewProduct(product) }">Sale</span>
                   <span v-if="!isAvailable(product)" class="storefront-unavailable-badge">Not Available</span>
                 </RouterLink>
                 <button type="button" class="storefront-wishlist" :class="{ 'is-favorite': isFavorite(product.public_id) }" :aria-label="isFavorite(product.public_id) ? `Remove ${product.name} from favourites` : `Add ${product.name} to favourites`" :aria-pressed="isFavorite(product.public_id)" @click="toggleFavorite(product.public_id)">
@@ -279,16 +167,24 @@ onMounted(async () => {
               </div>
             </article>
           </div>
-          <div v-else-if="searchQuery || selectedCategory" class="storefront-empty storefront-empty-search">
+          <div v-else-if="searchQuery || selectedCategory || inStockOnly" class="storefront-empty storefront-empty-search">
             <div class="storefront-empty-icon">⌕</div>
             <h2>No products found</h2>
-            <p>Try another search or browse a different category.</p>
-            <button class="button button-secondary" type="button" @click="searchQuery = ''; selectCategory('')">Clear filters</button>
+            <p>Nothing matched your filters. Try a broader search or another category.</p>
+            <div class="storefront-empty-actions">
+              <button class="button button-secondary" type="button" @click="clearAllFilters">Clear all filters</button>
+            </div>
+            <div v-if="suggestedCategories().length" class="storefront-empty-suggestions">
+              <button v-for="cat in suggestedCategories()" :key="cat.public_id" type="button" @click="clearSearch(); selectCategory(cat.public_id)">{{ cat.name }}</button>
+            </div>
           </div>
           <div v-else class="storefront-empty">
             <div class="storefront-empty-icon">⌂</div>
             <h2>No products yet</h2>
-            <p>This store is getting ready. Please check back soon.</p>
+            <p>This store is getting ready. Check back soon — new items appear here as the merchant adds them.</p>
+            <div v-if="whatsappUrl" class="storefront-empty-actions">
+              <a class="button button-primary" :href="whatsappUrl" target="_blank" rel="noopener noreferrer">Ask on WhatsApp</a>
+            </div>
           </div>
 
           <div v-if="totalPages > 1" class="storefront-pagination">
