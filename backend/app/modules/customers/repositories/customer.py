@@ -4,6 +4,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.commerce.models.order import Order
+from app.modules.commerce.models.order_status import OrderStatus
 from app.modules.customers.models.customer import Customer
 
 
@@ -53,3 +54,14 @@ class CustomerRepository:
         if row is None:
             return None
         return cast(Customer, row[0]), int(row[1])
+
+    async def list_orders(self, store_id: int, customer_id: int, offset: int, limit: int) -> list[Order]:
+        stmt = (
+            select(Order)
+            .join(OrderStatus, OrderStatus.id == Order.status_id)
+            .where(Order.store_id == store_id, Order.customer_id == customer_id)
+            .order_by(Order.created_at.desc(), Order.id.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        return list((await self.db.scalars(stmt)).all())
