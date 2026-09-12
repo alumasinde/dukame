@@ -19,7 +19,7 @@ def test_versioned_api() -> None:
         response = client.get("/api/v1")
     assert response.status_code == 200
     assert response.json()["service"] == "DukaMe API"
-    assert response.json()["version"] == "0.1.0"
+    assert response.json()["version"] == "0.2.0"
 
 
 def test_request_id_is_generated_and_returned() -> None:
