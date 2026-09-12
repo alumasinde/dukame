@@ -22,7 +22,9 @@ JWT_SECRET=replace-with-a-long-random-development-secret
 
 **Frontend env** — `frontend/.env` (copy from `.env.example`):
 ```env
-VITE_API_BASE_URL=http://localhost:8000/api/v1
+VITE_APP_URL=http://dukamedev.local:4173
+VITE_API_BASE_URL=/api/v1
+DEV_API_PROXY_TARGET=http://localhost:8000
 ```
 
 **Prerequisites:** Git, Docker Desktop, Node.js 20+, MySQL 8.x (runs *outside* Docker — inspect with HeidiSQL).
@@ -47,7 +49,7 @@ npm install          # first time only
 npm run dev -- --host dukamedev.local
 ```
 
-Open: `http://dukamedev.local:5173`
+Open: `http://dukamedev.local:4173`
 
 ---
 

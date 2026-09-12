@@ -104,8 +104,8 @@ onMounted(async () => {
           <div><strong>{{ storeName || 'Your store' }}</strong><small>Powered by {{ APP_NAME }}</small></div>
         </RouterLink>
         <div class="storefront-header-actions">
-          <RouterLink :to="`/${storeSlug}/favourites" class="storefront-header-link storefront-fav-badge" aria-label="Favourites">♥</RouterLink>
-          <RouterLink :to="`/${storeSlug}/cart" class="storefront-header-link">
+          <RouterLink :to="`/${storeSlug}/favourites`" class="storefront-header-link storefront-fav-badge" aria-label="Favourites">♥</RouterLink>
+          <RouterLink :to="`/${storeSlug}/cart`" class="storefront-header-link">
             <span class="storefront-cart-label">Cart</span>
             <span v-if="cartState.itemCount.value">{{ cartState.itemCount.value }}</span>
           </RouterLink>

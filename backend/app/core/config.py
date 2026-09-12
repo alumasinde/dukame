@@ -1,7 +1,7 @@
 from functools import lru_cache
 import secrets
 
-from pydantic import Field, MySQLDsn, RedisDsn, SecretStr, field_validator
+from pydantic import Field, MySQLDsn, RedisDsn, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -58,14 +58,10 @@ class Settings(BaseSettings):
     trusted_hosts: list[str] = Field(
         default_factory=lambda: ["localhost", "127.0.0.1", "dukamedev.local"]
     )
-    cors_origins: list[str] = Field(
-        default_factory=lambda: [
-            "http://localhost:5173",
-            "http://127.0.0.1:5173",
-            "http://dukamedev.local:5173",
-        ]
-    )
-    frontend_base_url: str = "http://dukamedev.local:5173"
+    # Extra browser origins may be supplied with CORS_ORIGINS. The primary frontend
+    # origin always comes from FRONTEND_BASE_URL, so its port is configured once.
+    cors_origins: list[str] = Field(default_factory=list)
+    frontend_base_url: str = "http://dukamedev.local:4173"
     public_api_base_url: str = "http://dukamedev.local:8000"
     payment_encryption_key: SecretStr | None = None
     sms_provider: str = "none"
@@ -102,6 +98,13 @@ class Settings(BaseSettings):
     @classmethod
     def validate_currency(cls, value: str) -> str:
         return value.upper()
+
+    @model_validator(mode="after")
+    def include_primary_frontend_origin(self) -> "Settings":
+        origin = self.frontend_base_url.rstrip("/")
+        if origin not in self.cors_origins:
+            self.cors_origins.append(origin)
+        return self
 
     @property
     def is_production(self) -> bool:

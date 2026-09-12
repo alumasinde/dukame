@@ -1,4 +1,6 @@
-const configuredBaseUrl = (import.meta.env.VITE_STOREFRONT_BASE_URL || '').trim()
+const configuredBaseUrl = (
+  import.meta.env.VITE_STOREFRONT_BASE_URL || import.meta.env.VITE_APP_URL || ''
+).trim()
 
 export function getStorefrontBaseUrl(): string {
   return (configuredBaseUrl || window.location.origin).replace(/\/+$/, '')

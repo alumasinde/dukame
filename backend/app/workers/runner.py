@@ -2,13 +2,15 @@ import asyncio
 import logging
 import time
 
-import app.models 
+from app.models import load_models
 from app.core.config import settings
 from app.core.database import SessionLocal
 from app.core.logging import configure_logging
 from app.core.redis import redis_client
 from app.modules.commerce.notifications import process_notification_queue
 from app.workers.maintenance import run_maintenance
+
+load_models()
 
 logger = logging.getLogger(__name__)
 

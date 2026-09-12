@@ -17,9 +17,11 @@ from app.core.health import readiness_check
 from app.core.logging import configure_logging
 from app.core.redis import redis_client
 from app.middleware.rate_limit import RateLimitMiddleware
+from app.models import load_models
 
 
 Path(settings.media_root).mkdir(parents=True, exist_ok=True)
+load_models()
 
 
 @asynccontextmanager
