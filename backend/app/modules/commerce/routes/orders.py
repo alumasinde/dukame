@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Header, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -36,6 +36,6 @@ async def get_order(tenant_public_id: str, order_public_id: str, user: User = De
 
 
 @router.patch("/{order_public_id}/status", response_model=OrderResponse)
-async def update_order_status(tenant_public_id: str, order_public_id: str, payload: OrderStatusUpdate, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> OrderResponse:
-    order = await CommerceService(db).update_order_status(user, tenant_public_id, order_public_id, payload)
+async def update_order_status(tenant_public_id: str, order_public_id: str, payload: OrderStatusUpdate, idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"), user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> OrderResponse:
+    order = await CommerceService(db).update_order_status(user, tenant_public_id, order_public_id, payload, idempotency_key)
     return order_response(order)
