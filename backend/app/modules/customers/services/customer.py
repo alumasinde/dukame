@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import builtins
 import uuid
 from typing import cast
 
@@ -31,9 +32,9 @@ class CustomerService:
 
     async def list(
         self, user: User, tenant_public_id: str, offset: int, limit: int, search: str | None
-    ) -> list[tuple[Customer, int]]:
+    ) -> builtins.list[tuple[Customer, int]]:
         store = await resolve_store(self.db, user, tenant_public_id, "customers.read")
-        return cast(list[tuple[Customer, int]], await self.repository.list(store.id, offset, limit, search))
+        return cast(builtins.list[tuple[Customer, int]], await self.repository.list(store.id, offset, limit, search))
 
     async def get(self, user: User, tenant_public_id: str, public_id: str) -> tuple[Customer, int]:
         store = await resolve_store(self.db, user, tenant_public_id, "customers.read")
@@ -44,7 +45,7 @@ class CustomerService:
 
     async def orders(
         self, user: User, tenant_public_id: str, public_id: str, offset: int, limit: int
-    ) -> list[Order]:
+    ) -> builtins.list[Order]:
         store = await resolve_store(self.db, user, tenant_public_id, "customers.read")
         customer = await self.repository.get(store.id, public_id)
         if customer is None:
