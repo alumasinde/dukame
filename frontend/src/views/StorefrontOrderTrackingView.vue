@@ -97,6 +97,7 @@ onBeforeUnmount(() => {
 
 <template>
   <main class="order-tracking-page">
+    <a class="skip-link" href="#order-tracking-content">Skip to order details</a>
     <header class="order-tracking-header">
       <RouterLink :to="`/${storeSlug}`" class="storefront-brand storefront-brand-link">
         <span class="storefront-mark">{{ APP_MARK }}</span>
@@ -107,9 +108,9 @@ onBeforeUnmount(() => {
 
     <section v-if="loading" class="order-tracking-state"><div class="status-spinner" /><p>Loading your order…</p></section>
 
-    <section v-else-if="error" class="order-tracking-state order-tracking-error"><div class="order-tracking-state-icon">!</div><h1>Order not found</h1><p>{{ error }}</p><RouterLink :to="`/${storeSlug}`" class="button button-primary">Back to store</RouterLink></section>
+    <section v-else-if="error" class="order-tracking-state order-tracking-error"><div class="order-tracking-state-icon">!</div><h1>Order not found</h1><p>{{ error }}</p><div class="storefront-empty-actions" style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center"><RouterLink :to="`/${storeSlug}/track`" class="button button-primary">Look up by phone</RouterLink><RouterLink :to="`/${storeSlug}`" class="button button-secondary">Back to store</RouterLink></div></section>
 
-    <section v-else-if="order" class="order-tracking-shell">
+    <section v-else-if="order" id="order-tracking-content" class="order-tracking-shell" tabindex="-1">
       <div class="order-tracking-heading">
         <div><span class="storefront-eyebrow">Order tracking</span><h1>Order #{{ order.order_number }}</h1><p>Hi {{ order.customer_first_name }}, your order is being updated automatically.</p></div>
         <span class="order-live" :class="{ complete: terminal }"><span />{{ refreshing ? 'Updating…' : terminal ? 'Order complete' : 'Live updates' }}</span>
