@@ -5,7 +5,7 @@ from app.core.database import get_db
 from app.modules.auth.models.identity import User
 from app.modules.auth.security import get_current_user
 from app.modules.customers.models.customer import Customer
-from app.modules.customers.schemas.customer import CustomerCreate, CustomerResponse, CustomerUpdate
+from app.modules.customers.schemas.customer import CustomerCreate, CustomerOrderResponse, CustomerResponse, CustomerUpdate
 from app.modules.customers.services.customer import CustomerService
 
 router = APIRouter(prefix="/tenants/{tenant_public_id}/customers", tags=["customers"])
@@ -45,6 +45,32 @@ async def create_customer(
     db: AsyncSession = Depends(get_db),
 ) -> CustomerResponse:
     return to_response(await CustomerService(db).create(user, tenant_public_id, payload))
+
+
+@router.get("/{customer_public_id}/orders", response_model=list[CustomerOrderResponse])
+async def list_customer_orders(
+    tenant_public_id: str,
+    customer_public_id: str,
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=100),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[CustomerOrderResponse]:
+    orders = await CustomerService(db).orders(user, tenant_public_id, customer_public_id, offset, limit)
+    return [
+        CustomerOrderResponse(
+            public_id=order.public_id,
+            order_number=order.order_number,
+            status_public_id=order.status.public_id,
+            status_code=order.status.code,
+            status_name=order.status.name,
+            currency=order.currency,
+            subtotal_minor=order.subtotal_minor,
+            total_minor=order.total_minor,
+            created_at=order.created_at.isoformat(),
+        )
+        for order in orders
+    ]
 
 
 @router.get("/{customer_public_id}", response_model=CustomerResponse)
