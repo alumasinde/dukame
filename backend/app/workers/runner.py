@@ -2,6 +2,7 @@ import asyncio
 import logging
 import time
 
+import app.models 
 from app.core.config import settings
 from app.core.database import SessionLocal
 from app.core.logging import configure_logging
