@@ -1,3 +1,4 @@
+from app.modules.commerce.models.audit_log import AuditLog
 from app.modules.commerce.models.cart import Cart
 from app.modules.commerce.models.cart_item import CartItem
 from app.modules.commerce.models.idempotency_key import IdempotencyKey
@@ -15,6 +16,7 @@ from app.modules.commerce.models.payment_event import PaymentEvent
 from app.modules.commerce.models.payment_method import PaymentMethod
 
 __all__ = [
+    "AuditLog",
     "Cart",
     "CartItem",
     "IdempotencyKey",
