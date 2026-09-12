@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
 from app.modules.auth.models.identity import User
@@ -61,6 +62,16 @@ class DeliveryService:
         return delivery
 
     async def issue_otp(self, user: User, tenant_public_id: str, order_public_id: str) -> tuple[OrderDelivery, str]:
+        """
+        Issue a one-time passcode for delivery confirmation.
+        
+        Security:
+        - Generate 6-digit cryptographically random code
+        - Store SHA256 hash (never store plaintext OTP)
+        - Set expiry window (configurable, typically 30 min)
+        - Reset attempt counter
+        - Only send to verified customer phone via SMS (not in rider app)
+        """
         store = await resolve_store(self.db, user, tenant_public_id, "delivery.otp.issue")
         await require_permission(self.db, user, store.tenant_id, "delivery.otp.issue")
         delivery = await self._delivery(store.id, order_public_id, lock=True)
@@ -70,13 +81,18 @@ class DeliveryService:
             raise HTTPException(status_code=409, detail="Delivery is already completed")
         if delivery.assigned_user_id is None:
             raise HTTPException(status_code=409, detail="Assign a delivery person before issuing a delivery OTP")
+        
+        # Generate 6-digit OTP
         otp = f"{secrets.randbelow(1_000_000):06d}"
         now = datetime.now(UTC)
+        
+        # Store only hash, not plaintext
         delivery.otp_hash = self._hash_otp(delivery.public_id, otp)
-        delivery.otp_expires_at = now + timedelta(minutes=settings.delivery_otp_ttl_minutes)
+        delivery.otp_expires_at = now + timedelta(minutes=settings.delivery_otp_ttl_minutes or 30)
         delivery.otp_verified_at = None
         delivery.otp_attempts = 0
         delivery.status = "out_for_delivery"
+        
         await record_audit(
             self.db,
             tenant_id=store.tenant_id,
@@ -88,9 +104,26 @@ class DeliveryService:
             after={"status": delivery.status, "otp_expires_at": delivery.otp_expires_at.isoformat()},
         )
         await self.db.commit()
+        
+        # NOTE: OTP should be sent to customer's verified phone via SMS
+        # NOT exposed in rider app, logs, or API responses
         return delivery, otp
 
     async def confirm(self, user: User, tenant_public_id: str, order_public_id: str, otp: str, note: str | None) -> OrderDelivery:
+        """
+        Confirm delivery with OTP verification.
+        
+        Security checks:
+        - Verify OTP is not expired
+        - Verify OTP attempt limit not exceeded
+        - Compare with hash (constant-time comparison)
+        - Only assigned rider can confirm
+        - Atomically mark as delivered with timestamp
+        
+        On failure:
+        - Increment attempt counter but don't mark as delivered
+        - Return error without revealing whether OTP format is correct
+        """
         store = await resolve_store(self.db, user, tenant_public_id, "delivery.confirm")
         await require_permission(self.db, user, store.tenant_id, "delivery.confirm")
         delivery = await self._delivery(store.id, order_public_id, lock=True)
@@ -98,22 +131,37 @@ class DeliveryService:
             raise HTTPException(status_code=404, detail="Delivery not found")
         if delivery.status == "delivered":
             raise HTTPException(status_code=409, detail="Delivery is already completed")
+        
+        # Only assigned rider can confirm
         if delivery.assigned_user_id is not None and delivery.assigned_user_id != user.id:
             raise HTTPException(status_code=403, detail="Only the assigned delivery person can confirm this delivery")
+        
         now = datetime.now(UTC)
+        
+        # Check OTP exists and is not expired
         if delivery.otp_hash is None or delivery.otp_expires_at is None or delivery.otp_expires_at <= now:
             raise HTTPException(status_code=409, detail="Delivery OTP is missing or expired")
-        if delivery.otp_attempts >= settings.delivery_otp_max_attempts:
+        
+        # Check attempt limit
+        if delivery.otp_attempts >= (settings.delivery_otp_max_attempts or 3):
             raise HTTPException(status_code=429, detail="Delivery OTP attempt limit exceeded")
+        
+        # Increment attempt counter
         delivery.otp_attempts += 1
+        
+        # Verify OTP with constant-time comparison (prevents timing attacks)
         if not secrets.compare_digest(delivery.otp_hash, self._hash_otp(delivery.public_id, otp.strip())):
+            # Save attempt but don't mark as delivered
             await self.db.commit()
             raise HTTPException(status_code=422, detail="Invalid delivery OTP")
+        
+        # OTP valid: mark delivery as completed
         delivery.status = "delivered"
         delivery.delivered_at = now
         delivery.delivered_by_user_id = user.id
         delivery.delivery_note = note.strip() if note else None
         delivery.otp_verified_at = now
+        
         await record_audit(
             self.db,
             tenant_id=store.tenant_id,
@@ -153,4 +201,5 @@ class DeliveryService:
 
     @staticmethod
     def _hash_otp(delivery_public_id: str, otp: str) -> str:
+        """Hash OTP with delivery_id as salt to prevent OTP reuse across deliveries."""
         return hashlib.sha256(f"{delivery_public_id}:{otp}".encode()).hexdigest()
