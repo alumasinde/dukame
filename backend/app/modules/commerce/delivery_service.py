@@ -12,6 +12,7 @@ from app.core.config import settings
 from app.modules.auth.models.identity import User
 from app.modules.catalogue.models.store import Store
 from app.modules.catalogue.services.context import resolve_store
+from app.modules.commerce.audit_service import record_audit
 from app.modules.commerce.models.order import Order
 from app.modules.commerce.models.order_delivery import OrderDelivery
 from app.modules.rbac.services.rbac import require_permission
@@ -42,8 +43,20 @@ class DeliveryService:
             delivery = await self._create_locked(store, order_public_id)
         if delivery.status == "delivered":
             raise HTTPException(status_code=409, detail="Delivered orders cannot be reassigned")
+        before = {"status": delivery.status, "assigned_user_id": delivery.assigned_user_id}
         delivery.assigned_user_id = assigned_user_id
         delivery.status = "assigned"
+        await record_audit(
+            self.db,
+            tenant_id=store.tenant_id,
+            store_id=store.id,
+            actor_user_id=user.id,
+            action="delivery.assigned",
+            entity_type="order_delivery",
+            entity_public_id=delivery.public_id,
+            before=before,
+            after={"status": delivery.status, "assigned_user_id": assigned_user_id},
+        )
         await self.db.commit()
         return delivery
 
@@ -64,6 +77,16 @@ class DeliveryService:
         delivery.otp_verified_at = None
         delivery.otp_attempts = 0
         delivery.status = "out_for_delivery"
+        await record_audit(
+            self.db,
+            tenant_id=store.tenant_id,
+            store_id=store.id,
+            actor_user_id=user.id,
+            action="delivery.otp.issued",
+            entity_type="order_delivery",
+            entity_public_id=delivery.public_id,
+            after={"status": delivery.status, "otp_expires_at": delivery.otp_expires_at.isoformat()},
+        )
         await self.db.commit()
         return delivery, otp
 
@@ -91,6 +114,17 @@ class DeliveryService:
         delivery.delivered_by_user_id = user.id
         delivery.delivery_note = note.strip() if note else None
         delivery.otp_verified_at = now
+        await record_audit(
+            self.db,
+            tenant_id=store.tenant_id,
+            store_id=store.id,
+            actor_user_id=user.id,
+            action="delivery.confirmed",
+            entity_type="order_delivery",
+            entity_public_id=delivery.public_id,
+            before={"status": "out_for_delivery", "otp_attempts": delivery.otp_attempts - 1},
+            after={"status": delivery.status, "delivered_at": now.isoformat(), "delivery_note": delivery.delivery_note},
+        )
         await self.db.commit()
         return delivery
 
