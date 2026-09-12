@@ -37,6 +37,18 @@ class Settings(BaseSettings):
     billing_interval_days_monthly: int = Field(default=30, ge=1, le=366)
     billing_interval_days_quarterly: int = Field(default=90, ge=1, le=400)
     billing_interval_days_yearly: int = Field(default=365, ge=1, le=400)
+    subscription_invoice_due_days: int = Field(default=3, ge=0, le=30)
+    subscription_renewal_lead_days: int = Field(default=3, ge=0, le=30)
+    # Platform (DukaMe SaaS) M-Pesa — used for subscription billing, not store orders.
+    platform_mpesa_enabled: bool = False
+    platform_mpesa_consumer_key: str | None = None
+    platform_mpesa_consumer_secret: SecretStr | None = None
+    platform_mpesa_shortcode: str | None = None
+    platform_mpesa_passkey: SecretStr | None = None
+    platform_mpesa_environment: str = "sandbox"
+    platform_mpesa_transaction_type: str = "CustomerPayBillOnline"
+    platform_mpesa_account_reference: str = "DukaMe"
+    platform_mpesa_transaction_desc: str = "Subscription"
     media_root: str = "uploads"
     media_max_bytes: int = Field(default=5 * 1024 * 1024, ge=1024, le=25 * 1024 * 1024)
     cart_session_ttl_seconds: int = Field(default=2592000, ge=3600, le=31536000)
