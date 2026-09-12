@@ -40,9 +40,21 @@ export interface Storefront {
   name: string
   slug: string
   description: string | null
+  contact_phone?: string | null
   currency: string
   categories: StorefrontCategory[]
   products: StorefrontProduct[]
+  total_products?: number
+}
+
+export type StorefrontSort = 'featured' | 'price_asc' | 'price_desc' | 'newest'
+
+export interface StorefrontQuery {
+  sort?: StorefrontSort
+  limit?: number
+  offset?: number
+  q?: string
+  category?: string
 }
 
 const storefrontApi = axios.create({
@@ -51,8 +63,8 @@ const storefrontApi = axios.create({
   withCredentials: true,
 })
 
-export function getStorefront(slug: string) {
-  return storefrontApi.get<Storefront>(`/storefront/${encodeURIComponent(slug)}`)
+export function getStorefront(slug: string, params?: StorefrontQuery) {
+  return storefrontApi.get<Storefront>(`/storefront/${encodeURIComponent(slug)}`, { params })
 }
 
 export function getStorefrontProduct(storeSlug: string, productSlug: string) {

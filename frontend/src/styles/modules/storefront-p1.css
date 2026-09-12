@@ -1,0 +1,223 @@
+/* P1 storefront: trust header, favourites, sort, share, category routes */
+
+.storefront-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.storefront-header-link {
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 11px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 750;
+  text-decoration: none;
+  transition: border-color .15s ease, background .15s ease, transform .15s ease;
+}
+
+.storefront-header-link:hover {
+  border-color: #9dd8ce;
+  background: #f7fcfb;
+  text-decoration: none;
+  transform: translateY(-1px);
+}
+
+.storefront-header-link.is-wa {
+  border-color: #b7e4c7;
+  background: #f0faf4;
+  color: #0d6b3c;
+}
+
+.storefront-header-link.is-wa:hover {
+  background: #e4f6ec;
+}
+
+.storefront-fav-badge {
+  position: relative;
+}
+
+.storefront-fav-badge span {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: #c04f68;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.storefront-trust {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.storefront-trust a {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 750;
+  text-decoration: none;
+}
+
+.storefront-trust-wa {
+  background: #25d366;
+  color: #fff;
+  box-shadow: 0 6px 18px rgba(37, 211, 102, 0.25);
+}
+
+.storefront-trust-wa:hover {
+  filter: brightness(0.97);
+  color: #fff;
+  text-decoration: none;
+}
+
+.storefront-trust-track {
+  background: #fff;
+  border: 1px solid var(--line);
+  color: #36534e;
+}
+
+.storefront-trust-track:hover {
+  background: #f7fcfb;
+  text-decoration: none;
+}
+
+.storefront-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.storefront-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.storefront-sort select {
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #fff;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.storefront-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.storefront-pagination button {
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.storefront-pagination button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.storefront-pagination span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.storefront-share-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 14px 0 18px;
+}
+
+.storefront-share-btn {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 13px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 750;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.storefront-share-btn:hover {
+  background: #f7fcfb;
+  border-color: #9dd8ce;
+  text-decoration: none;
+}
+
+.storefront-share-btn.is-wa {
+  background: #f0faf4;
+  border-color: #b7e4c7;
+  color: #0d6b3c;
+}
+
+.storefront-share-toast {
+  margin-top: 8px;
+  color: #1f7a5c;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.storefront-favourites-empty {
+  min-height: 280px;
+}
+
+@media (max-width: 680px) {
+  .storefront-header-link span.hide-sm {
+    display: none;
+  }
+  .storefront-header-actions {
+    gap: 6px;
+  }
+  .storefront-trust a {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+}
