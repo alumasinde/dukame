@@ -19,6 +19,7 @@ from app.modules.catalogue.models.store import Store
 from app.modules.catalogue.models.variant import ProductVariant
 from app.modules.catalogue.models.variant_option_value import ProductVariantOptionValue
 from app.modules.catalogue.services.context import resolve_store
+from app.modules.commerce.audit_service import record_audit
 from app.modules.commerce.models.cart import Cart
 from app.modules.commerce.models.cart_item import CartItem
 from app.modules.commerce.models.idempotency_key import IdempotencyKey
@@ -29,10 +30,11 @@ from app.modules.commerce.models.order_status import OrderStatus
 from app.modules.commerce.models.order_status_history import OrderStatusHistory
 from app.modules.commerce.models.order_status_transition import OrderStatusTransition
 from app.modules.commerce.models.payment import Payment
-from app.modules.commerce.notifications import queue_order_sms
+from app.modules.commerce.notifications import normalize_phone, queue_order_sms
 from app.modules.commerce.payment_service import PaymentService
 from app.modules.commerce.schemas import CartItemAdd, CartItemUpdate, CheckoutRequest, OrderStatusUpdate
 from app.modules.commerce.tracking import tracking_token, tracking_token_hash
+from app.modules.customers.models.customer import Customer
 from app.modules.rbac.services.rbac import require_permission
 
 
@@ -130,6 +132,49 @@ class CommerceService:
         await self.db.commit()
         return await self._load_cart(cart.id)
 
+    async def _resolve_checkout_customer(self, store: Store, payload: CheckoutRequest) -> Customer | None:
+        phone = normalize_phone(payload.phone)
+        if not phone:
+            return None
+        customer = await self.db.scalar(select(Customer).where(Customer.store_id == store.id, Customer.phone == phone).with_for_update())
+        if customer is not None:
+            return customer
+        customer = Customer(
+            public_id=secrets.token_hex(16),
+            store_id=store.id,
+            first_name=payload.first_name.strip(),
+            last_name=payload.last_name.strip(),
+            phone=phone,
+            email=payload.email.strip().lower() if payload.email else None,
+            notes=None,
+        )
+        try:
+            async with self.db.begin_nested():
+                self.db.add(customer)
+                await self.db.flush()
+                await record_audit(
+                    self.db,
+                    tenant_id=store.tenant_id,
+                    store_id=store.id,
+                    actor_user_id=None,
+                    action="customer.created",
+                    entity_type="customer",
+                    entity_public_id=customer.public_id,
+                    after={
+                        "first_name": customer.first_name,
+                        "last_name": customer.last_name,
+                        "phone": customer.phone,
+                        "email": customer.email,
+                        "is_active": customer.is_active,
+                        "source": "checkout",
+                    },
+                )
+        except IntegrityError:
+            customer = await self.db.scalar(select(Customer).where(Customer.store_id == store.id, Customer.phone == phone).with_for_update())
+            if customer is None:
+                raise HTTPException(status_code=409, detail="Customer could not be associated with this order") from None
+        return customer
+
     async def checkout(self, store: Store, token: str, payload: CheckoutRequest, idempotency_key: str | None = None) -> Order:
         key = self._validate_idempotency_key(idempotency_key)
         request_hash = self._idempotency_hash(payload.model_dump(mode="json"))
@@ -167,9 +212,10 @@ class CommerceService:
             subtotal += unit_price * item.quantity
             snapshots.append((item, product, variant, unit_price))
 
+        customer = await self._resolve_checkout_customer(store, payload)
         public_id = secrets.token_hex(16)
         raw_tracking_token = tracking_token(public_id)
-        order = Order(public_id=public_id, store_id=store.id, status_id=initial_status.id, order_number=await self._order_number(), tracking_token_hash=tracking_token_hash(raw_tracking_token), customer_first_name=payload.first_name.strip(), customer_last_name=payload.last_name.strip(), customer_email=payload.email.strip() if payload.email else None, customer_phone=payload.phone.strip(), notes=payload.notes.strip() if payload.notes else None, currency=store.currency, subtotal_minor=subtotal, total_minor=subtotal)
+        order = Order(public_id=public_id, store_id=store.id, customer_id=customer.id if customer else None, status_id=initial_status.id, order_number=await self._order_number(), tracking_token_hash=tracking_token_hash(raw_tracking_token), customer_first_name=payload.first_name.strip(), customer_last_name=payload.last_name.strip(), customer_email=payload.email.strip() if payload.email else None, customer_phone=payload.phone.strip(), notes=payload.notes.strip() if payload.notes else None, currency=store.currency, subtotal_minor=subtotal, total_minor=subtotal)
         self.db.add(order)
         await self.db.flush()
         self.db.add(OrderStatusHistory(order_id=order.id, status_id=initial_status.id, source="customer"))
