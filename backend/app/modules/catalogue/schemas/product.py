@@ -39,6 +39,15 @@ class ProductUpdate(BaseModel):
     inventory_quantity: int | None = Field(default=None, ge=0)
     status: str | None = Field(default=None, min_length=1, max_length=32)
 
+    @model_validator(mode="before")
+    @classmethod
+    def reject_null_required_fields(cls, value):
+        if isinstance(value, dict):
+            for field in ("name", "slug", "price_minor", "currency", "inventory_tracking", "status"):
+                if field in value and value[field] is None:
+                    raise ValueError(f"{field} cannot be null")
+        return value
+
     @field_validator("currency")
     @classmethod
     def normalize_currency(cls, value: str | None) -> str | None:
