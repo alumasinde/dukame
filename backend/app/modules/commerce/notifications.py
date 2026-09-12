@@ -12,7 +12,7 @@ from app.modules.catalogue.models.store import Store
 from app.modules.commerce.models.order import Order
 from app.modules.commerce.models.order_notification import OrderNotification
 from app.modules.commerce.models.order_status import OrderStatus
-from app.modules.commerce.notification_channels import dispatch_notification, phone_digits
+from app.modules.commerce.notification_channels import dispatch_notification, normalize_phone, phone_digits
 from app.modules.commerce.tracking import tracking_token, tracking_url
 from app.modules.customers.models.customer import Customer
 
@@ -20,19 +20,6 @@ logger = logging.getLogger(__name__)
 
 CHANNEL_SMS = "sms"
 CHANNEL_WHATSAPP = "whatsapp"
-
-
-def normalize_phone(value: str) -> str:
-    """Normalize Kenyan numbers to +2547XXXXXXXX form."""
-    phone = "".join(character for character in value.strip() if character.isdigit() or character == "+")
-    if phone.startswith(("07", "01")):
-        return "+254" + phone[1:]
-    if phone.startswith("254"):
-        return "+" + phone
-    if phone.startswith("+"):
-        return phone
-    return phone
-
 
 def status_message(store_name: str, order: Order, status: OrderStatus, url: str) -> str:
     return f"{store_name}: Order #{order.order_number} is now {status.name}. Track your order: {url}"

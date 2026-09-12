@@ -8,8 +8,20 @@ from app.core.config import settings
 from app.modules.commerce.models.order_notification import OrderNotification
 
 
+def normalize_phone(value: str) -> str:
+    """Normalize Kenyan numbers to +2547XXXXXXXX form."""
+    phone = "".join(character for character in value.strip() if character.isdigit() or character == "+")
+    if phone.startswith(("07", "01")):
+        return "+254" + phone[1:]
+    if phone.startswith("254"):
+        return "+" + phone
+    if phone.startswith("+"):
+        return phone
+    return phone
+
 def phone_digits(value: str) -> str:
-    return "".join(character for character in value if character.isdigit())
+    normalized = normalize_phone(value)
+    return "".join(character for character in normalized if character.isdigit())
 
 
 async def send_sms(notification: OrderNotification) -> str | None:

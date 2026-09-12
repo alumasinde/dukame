@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
-from app.core.time import utc_now
+from app.core.time import ensure_utc, utc_now
 from app.modules.auth.models.identity import User
 from app.modules.subscriptions.models.billing import SubscriptionInvoice, SubscriptionPayment
 from app.modules.subscriptions.models.subscription import Plan, Subscription
@@ -87,7 +87,11 @@ def prorate_upgrade_amount(
     ts = now or utc_now()
     period_end = subscription.current_period_end
     period_start = subscription.starts_at
-    if period_end is None or period_end <= ts:
+    if period_end is None or period_start is None:
+        return full, meta
+    period_end = ensure_utc(period_end)
+    period_start = ensure_utc(period_start)
+    if period_end <= ts:
         return full, meta
 
     total_seconds = (period_end - period_start).total_seconds()
@@ -108,7 +112,6 @@ def prorate_upgrade_amount(
         }
     )
     return payable, meta
-
 
 async def list_tenant_invoices(
     db: AsyncSession, tenant_id: int, *, limit: int = 50

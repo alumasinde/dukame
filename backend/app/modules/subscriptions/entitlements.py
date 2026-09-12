@@ -4,7 +4,7 @@ from typing import Any
 
 from fastapi import HTTPException
 
-from app.core.time import utc_now
+from app.core.time import ensure_utc, utc_now
 
 # Statuses that still grant plan entitlements (mirrored from subscription service).
 _ENTITLED_STATUSES = {"trial", "active", "past_due"}
@@ -35,7 +35,7 @@ def is_subscription_entitled(subscription: Any) -> bool:
     period_end = getattr(subscription, "current_period_end", None)
     if period_end is None:
         return True
-    return period_end >= utc_now()
+    return ensure_utc(period_end) >= utc_now()
 
 
 def feature_value(subscription: Any, feature_key: str, default: Any = None) -> Any:

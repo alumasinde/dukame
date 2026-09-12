@@ -3,12 +3,13 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from fastapi import HTTPException
+from app.modules.subscriptions.schemas import subscription
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
-from app.core.time import utc_now
+from app.core.time import ensure_utc, utc_now
 from app.modules.auth.models.identity import User
 from app.modules.subscriptions.models.subscription import (
     Plan,
@@ -99,8 +100,7 @@ def is_entitled(subscription: Subscription) -> bool:
         return False
     if subscription.current_period_end is None:
         return True
-    return subscription.current_period_end >= utc_now()
-
+    return ensure_utc(subscription.current_period_end) >= utc_now()
 
 async def list_active_plans(db: AsyncSession) -> list[Plan]:
     result = await db.execute(
