@@ -56,6 +56,8 @@ class ProductService:
         if product is None:
             raise HTTPException(status_code=404, detail="Product not found")
         values = payload.model_dump(exclude_unset=True)
+        if "inventory_quantity" in values:
+            raise HTTPException(status_code=409, detail="Inventory quantity must be changed through the inventory adjustment API")
         if "currency" in values and values["currency"] != store.currency:
             raise HTTPException(status_code=422, detail=f"Product currency must match the store currency ({store.currency})")
         if "slug" in values and values["slug"] != product.slug and await self.repository.get_by_slug(store.id, values["slug"]):
