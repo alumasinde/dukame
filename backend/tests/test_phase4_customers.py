@@ -37,9 +37,10 @@ def test_customer_api_has_search_history_and_lifecycle_permissions() -> None:
 def test_customer_changes_are_audited() -> None:
     service = read("app/modules/customers/services/customer.py")
     assert 'action="customer.created"' in service
-    assert 'action="customer.updated"' in service
+    assert 'action = "customer.updated"' in service
     assert 'action = "customer.activated"' in service
     assert 'action = "customer.deactivated"' in service
+    assert 'action=action' in service
     assert 'before=' in service
     assert 'after=' in service
 
