@@ -29,3 +29,15 @@ class CustomerResponse(BaseModel):
     notes: str | None
     is_active: bool
     order_count: int = 0
+
+
+class CustomerOrderResponse(BaseModel):
+    public_id: str
+    order_number: str
+    status_public_id: str
+    status_code: str
+    status_name: str
+    currency: str
+    subtotal_minor: int
+    total_minor: int
+    created_at: str
