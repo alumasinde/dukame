@@ -8,11 +8,12 @@ from app.modules.auth.security import get_current_user
 from app.modules.commerce.delivery_schemas import DeliveryAssignRequest, DeliveryConfirmRequest, DeliveryOtpResponse, DeliveryResponse
 from app.modules.commerce.delivery_service import DeliveryService
 from app.modules.commerce.models.order import Order
+from app.modules.commerce.models.order_delivery import OrderDelivery
 
 router = APIRouter(prefix="/tenants/{tenant_public_id}/orders/{order_public_id}/delivery", tags=["delivery"])
 
 
-async def response(db: AsyncSession, delivery) -> DeliveryResponse:
+async def response(db: AsyncSession, delivery: OrderDelivery) -> DeliveryResponse:
     order = await db.scalar(select(Order).where(Order.id == delivery.order_id))
     if order is None:
         raise ValueError("Delivery order not found")
