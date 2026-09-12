@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import uuid
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
 from fastapi import HTTPException
@@ -15,7 +15,7 @@ from app.core.config import settings
 from app.core.time import utc_now
 from app.modules.auth.models.identity import User
 from app.modules.subscriptions.models.billing import SubscriptionInvoice, SubscriptionPayment
-from app.modules.subscriptions.models.subscription import Plan, Subscription, SubscriptionEvent
+from app.modules.subscriptions.models.subscription import Plan, Subscription
 from app.modules.subscriptions.services.subscription import (
     STATUS_ACTIVE,
     STATUS_CANCELLED,
@@ -28,9 +28,7 @@ from app.modules.subscriptions.services.subscription import (
     get_plan_by_public_id,
     get_tenant_subscription,
     interval_end,
-    is_entitled,
 )
-from app.modules.tenancy.models.tenant import Tenant, TenantUser
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +50,64 @@ PURPOSE_REACTIVATION = "reactivation"
 def _idempotency_key(*parts: str) -> str:
     raw = "|".join(parts)
     return hashlib.sha256(raw.encode()).hexdigest()[:64]
+
+
+def prorate_upgrade_amount(
+    subscription: Subscription,
+    new_plan: Plan,
+    billing_interval: str,
+    *,
+    now: datetime | None = None,
+) -> tuple[int, dict[str, Any]]:
+    """Compute payable amount for an upgrade with simple time-based credit.
+
+    Credit = unused fraction of the current paid period's price.
+    Never credits above the new plan price; minimum charge is 0.
+    """
+    full = new_plan.price_for_interval(billing_interval)
+    meta: dict[str, Any] = {
+        "list_price_minor": full,
+        "credit_minor": 0,
+        "prorated": False,
+    }
+    if full <= 0:
+        return 0, meta
+
+    current_plan = subscription.plan
+    if current_plan is None or current_plan.is_free:
+        return full, meta
+
+    try:
+        old_price = current_plan.price_for_interval(subscription.billing_interval)
+    except ValueError:
+        return full, meta
+    if old_price <= 0:
+        return full, meta
+
+    ts = now or utc_now()
+    period_end = subscription.current_period_end
+    period_start = subscription.starts_at
+    if period_end is None or period_end <= ts:
+        return full, meta
+
+    total_seconds = (period_end - period_start).total_seconds()
+    remaining_seconds = max((period_end - ts).total_seconds(), 0.0)
+    if total_seconds <= 0:
+        return full, meta
+
+    credit = int(old_price * (remaining_seconds / total_seconds))
+    credit = max(min(credit, full), 0)
+    payable = max(full - credit, 0)
+    meta.update(
+        {
+            "credit_minor": credit,
+            "prorated": credit > 0,
+            "remaining_ratio": round(remaining_seconds / total_seconds, 6),
+            "from_plan_price_minor": old_price,
+            "from_interval": subscription.billing_interval,
+        }
+    )
+    return payable, meta
 
 
 async def list_tenant_invoices(
@@ -149,8 +205,8 @@ async def create_upgrade_invoice(
     if plan is None:
         raise HTTPException(status_code=404, detail="Plan not found")
 
-    amount = plan.price_for_interval(billing_interval)
-    if amount <= 0:
+    list_price = plan.price_for_interval(billing_interval)
+    if list_price <= 0:
         raise HTTPException(
             status_code=422,
             detail={
@@ -159,14 +215,17 @@ async def create_upgrade_invoice(
             },
         )
 
-    start = utc_now()
-    period_end = interval_end(start, billing_interval, 0)
+    now = utc_now()
+    amount, proration_meta = prorate_upgrade_amount(
+        subscription, plan, billing_interval, now=now
+    )
+    period_end = interval_end(now, billing_interval, 0)
     key = _idempotency_key(
         "upgrade",
         str(subscription.id),
         plan.public_id,
         billing_interval,
-        start.strftime("%Y%m%d"),
+        now.strftime("%Y%m%d%H"),
     )
     invoice = await _create_invoice(
         db,
@@ -176,15 +235,21 @@ async def create_upgrade_invoice(
         billing_interval=billing_interval,
         purpose=PURPOSE_UPGRADE,
         amount_minor=amount,
-        period_start=start,
+        period_start=now,
         period_end=period_end,
         idempotency_key=key,
         metadata={
             "from_plan": subscription.plan.slug,
             "to_plan": plan.slug,
             "actor_user_id": user.id,
+            **proration_meta,
         },
     )
+
+    # Zero after credit → apply immediately without payment provider.
+    if amount == 0 and invoice.status == INVOICE_OPEN:
+        await apply_paid_invoice(db, invoice)
+
     return subscription, invoice
 
 
@@ -214,9 +279,7 @@ async def initiate_invoice_payment(
     db.add(payment)
     await db.flush()
 
-    # Platform M-Pesa (SaaS billing) — config from environment, not merchant stores.
     if not settings.platform_mpesa_enabled:
-        # Leave payment pending; ops can mark paid manually or enable provider later.
         logger.info(
             "platform_mpesa_disabled_invoice_left_open",
             extra={"invoice_public_id": invoice.public_id},
@@ -224,7 +287,7 @@ async def initiate_invoice_payment(
         return payment
 
     try:
-        from app.modules.commerce.mpesa import MpesaClient, MpesaProviderError
+        from app.modules.commerce.mpesa import MpesaClient
 
         config = {
             "consumer_key": settings.platform_mpesa_consumer_key or "",
@@ -307,20 +370,13 @@ async def apply_paid_invoice(db: AsyncSession, invoice: SubscriptionInvoice) -> 
     old_status = subscription.status
     old_plan_slug = subscription.plan.slug if subscription.plan else None
 
-    target_status = STATUS_ACTIVE
+    # Payment confirmation can revive terminal states.
     if old_status in {STATUS_CANCELLED, STATUS_EXPIRED}:
-        # Reactivation via paid invoice
-        if STATUS_ACTIVE not in {STATUS_ACTIVE}:  # always allow into active from terminal via payment
-            pass
-        # Terminal states: allow jump to active when payment confirms.
+        subscription.status = STATUS_ACTIVE
+    elif old_status in {STATUS_TRIAL, STATUS_ACTIVE, STATUS_PAST_DUE}:
         subscription.status = STATUS_ACTIVE
     else:
-        try:
-            _assert_transition(old_status, target_status)
-        except HTTPException:
-            # past_due / trial / active already entitled paths
-            if old_status not in {STATUS_TRIAL, STATUS_ACTIVE, STATUS_PAST_DUE}:
-                raise
+        _assert_transition(old_status, STATUS_ACTIVE)
         subscription.status = STATUS_ACTIVE
 
     subscription.plan_id = plan.id
@@ -355,8 +411,50 @@ async def apply_paid_invoice(db: AsyncSession, invoice: SubscriptionInvoice) -> 
     return subscription
 
 
+async def mark_invoice_paid_manual(
+    db: AsyncSession,
+    *,
+    invoice: SubscriptionInvoice,
+    actor_user_id: int | None = None,
+    note: str | None = None,
+) -> Subscription:
+    """Support / offline payment: mark open invoice paid and apply subscription."""
+    if invoice.status != INVOICE_OPEN:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "invoice_not_open", "status": invoice.status},
+        )
+
+    payment = SubscriptionPayment(
+        public_id=uuid.uuid4().hex,
+        invoice_id=invoice.id,
+        status=PAYMENT_SUCCEEDED,
+        provider="manual",
+        amount_minor=invoice.amount_minor,
+        currency=invoice.currency,
+        paid_at=utc_now(),
+        provider_reference=(note or "manual")[:128],
+    )
+    db.add(payment)
+    await db.flush()
+
+    subscription = await apply_paid_invoice(db, invoice)
+    _add_event(
+        db,
+        subscription.id,
+        "subscription.invoice_marked_paid",
+        {
+            "invoice_public_id": invoice.public_id,
+            "actor_user_id": actor_user_id,
+            "note": note,
+            "source": "manual",
+        },
+    )
+    await db.flush()
+    return subscription
+
+
 async def handle_mpesa_callback(db: AsyncSession, body: dict[str, Any]) -> dict[str, str]:
-    """Process Safaricom STK callback for subscription payments."""
     callback = body.get("Body", {}).get("stkCallback", {}) if isinstance(body, dict) else {}
     checkout_id = callback.get("CheckoutRequestID")
     result_code = str(callback.get("ResultCode", ""))
@@ -371,16 +469,17 @@ async def handle_mpesa_callback(db: AsyncSession, body: dict[str, Any]) -> dict[
         )
     )
     if payment is None:
-        logger.warning("subscription_callback_unknown_checkout", extra={"checkout_id": checkout_id})
+        logger.warning(
+            "subscription_callback_unknown_checkout", extra={"checkout_id": checkout_id}
+        )
         return {"ResultCode": "0", "ResultDesc": "Accepted"}
 
-    invoice = await get_invoice_by_public_id_for_payment(db, payment.invoice_id)
+    invoice = await get_invoice_by_id_for_update(db, payment.invoice_id)
     if invoice is None:
         return {"ResultCode": "0", "ResultDesc": "Accepted"}
 
     payment.provider_status_code = result_code
     if result_code == "0":
-        # Extract MpesaReceiptNumber if present
         items = callback.get("CallbackMetadata", {}).get("Item", []) or []
         receipt = None
         for item in items:
@@ -399,7 +498,7 @@ async def handle_mpesa_callback(db: AsyncSession, body: dict[str, Any]) -> dict[
     return {"ResultCode": "0", "ResultDesc": "Accepted"}
 
 
-async def get_invoice_by_public_id_for_payment(
+async def get_invoice_by_id_for_update(
     db: AsyncSession, invoice_id: int
 ) -> SubscriptionInvoice | None:
     result = await db.execute(
@@ -412,7 +511,6 @@ async def get_invoice_by_public_id_for_payment(
 
 
 async def create_renewal_invoices(db: AsyncSession, *, batch_size: int = 100) -> int:
-    """Create renewal invoices for subscriptions approaching period end."""
     now = utc_now()
     window_end = now + timedelta(days=settings.subscription_renewal_lead_days)
 
@@ -437,7 +535,6 @@ async def create_renewal_invoices(db: AsyncSession, *, batch_size: int = 100) ->
             continue
         amount = plan.price_for_interval(sub.billing_interval)
         if amount <= 0:
-            # Free plans: extend period without invoice.
             sub.current_period_end = interval_end(
                 sub.current_period_end or now, sub.billing_interval, 0
             )
@@ -488,7 +585,6 @@ async def create_renewal_invoices(db: AsyncSession, *, batch_size: int = 100) ->
 
 
 async def mark_past_due_unpaid(db: AsyncSession, *, batch_size: int = 100) -> int:
-    """Move active/trial subs with overdue open renewal invoices to past_due."""
     now = utc_now()
     result = await db.execute(
         select(SubscriptionInvoice)
