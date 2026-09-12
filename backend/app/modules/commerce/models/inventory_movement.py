@@ -1,16 +1,16 @@
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, Integer, String, func
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, Integer, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
 
 if TYPE_CHECKING:
+    from app.modules.auth.models.identity import User
     from app.modules.catalogue.models.product import Product
     from app.modules.catalogue.models.store import Store
     from app.modules.catalogue.models.variant import ProductVariant
-    from app.modules.auth.models.identity import User
 
 
 class InventoryMovement(Base):
@@ -40,4 +40,5 @@ class InventoryMovement(Base):
         Index("ix_inventory_movements_store_created", "store_id", "created_at", "id"),
         Index("ix_inventory_movements_product_created", "product_id", "created_at", "id"),
         Index("ix_inventory_movements_reference", "reference_type", "reference_id"),
+        UniqueConstraint("store_id", "reference_type", "reference_id", "movement_type", name="uq_inventory_movements_reference_type_id"),
     )
