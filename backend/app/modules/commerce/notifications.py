@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import logging
+import secrets
 from datetime import UTC, datetime, timedelta
 
 import httpx
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -36,10 +37,25 @@ async def queue_order_sms(db: AsyncSession, order: Order, status: OrderStatus, s
     if not recipient:
         return
     url = tracking_url(store_slug, tracking_token(order.public_id))
-    exists = await db.scalar(select(OrderNotification.id).where(OrderNotification.order_id == order.id, OrderNotification.status_id == status.id, OrderNotification.channel == "sms"))
+    exists = await db.scalar(
+        select(OrderNotification.id).where(
+            OrderNotification.order_id == order.id,
+            OrderNotification.status_id == status.id,
+            OrderNotification.channel == "sms",
+        )
+    )
     if exists is not None:
         return
-    db.add(OrderNotification(order_id=order.id, status_id=status.id, channel="sms", recipient=recipient, message=status_message(store_name, order, status, url), tracking_url=url))
+    db.add(
+        OrderNotification(
+            order_id=order.id,
+            status_id=status.id,
+            channel="sms",
+            recipient=recipient,
+            message=status_message(store_name, order, status, url),
+            tracking_url=url,
+        )
+    )
 
 
 async def send_sms(notification: OrderNotification) -> str | None:
@@ -65,30 +81,80 @@ async def send_sms(notification: OrderNotification) -> str | None:
     return str(result.get("messageId")) if result.get("messageId") else None
 
 
-async def process_notification_queue(db: AsyncSession, limit: int = 10) -> int:
+async def process_notification_queue(db: AsyncSession, limit: int = 10, worker_id: str | None = None) -> int:
     if settings.sms_provider == "none":
         return 0
+    if limit < 1:
+        raise ValueError("limit must be positive")
+    worker_id = worker_id or secrets.token_hex(16)
     now = datetime.now(UTC)
-    notifications = list((await db.scalars(select(OrderNotification).where(OrderNotification.status == "pending", OrderNotification.available_at <= now, OrderNotification.attempts < settings.notification_max_attempts).order_by(OrderNotification.created_at.asc(), OrderNotification.id.asc()).limit(limit).with_for_update())).all())
+    lease_expires_at = now + timedelta(seconds=settings.notification_lease_seconds)
+    eligible = or_(
+        (OrderNotification.status == "pending") & (OrderNotification.available_at <= now),
+        (OrderNotification.status == "processing") & (OrderNotification.lease_expires_at <= now),
+    )
+    notifications = list(
+        (
+            await db.scalars(
+                select(OrderNotification)
+                .where(eligible, OrderNotification.attempts < settings.notification_max_attempts)
+                .order_by(OrderNotification.created_at.asc(), OrderNotification.id.asc())
+                .limit(limit)
+                .with_for_update(skip_locked=True)
+            )
+        ).all()
+    )
     if not notifications:
         return 0
     for notification in notifications:
         notification.status = "processing"
         notification.attempts += 1
+        notification.worker_id = worker_id
+        notification.lease_expires_at = lease_expires_at
     await db.commit()
+
     processed = 0
     for notification in notifications:
         try:
             message_id = await send_sms(notification)
-            notification.status = "sent"
-            notification.sent_at = datetime.now(UTC)
-            notification.provider_message_id = message_id
-            notification.last_error = None
+            now = datetime.now(UTC)
+            await db.execute(
+                OrderNotification.__table__.update()
+                .where(
+                    OrderNotification.id == notification.id,
+                    OrderNotification.worker_id == worker_id,
+                    OrderNotification.status == "processing",
+                )
+                .values(
+                    status="sent",
+                    sent_at=now,
+                    provider_message_id=message_id,
+                    last_error=None,
+                    lease_expires_at=None,
+                    worker_id=None,
+                )
+            )
+            await db.commit()
             processed += 1
         except Exception as exc:
-            notification.status = "pending" if notification.attempts < settings.notification_max_attempts else "failed"
-            notification.available_at = datetime.now(UTC) + timedelta(seconds=min(300, 2 ** notification.attempts * 5))
-            notification.last_error = str(exc)[:1000]
+            now = datetime.now(UTC)
+            next_status = "pending" if notification.attempts < settings.notification_max_attempts else "failed"
+            next_available = now + timedelta(seconds=min(settings.notification_max_backoff_seconds, 2 ** notification.attempts * 5))
+            await db.execute(
+                OrderNotification.__table__.update()
+                .where(
+                    OrderNotification.id == notification.id,
+                    OrderNotification.worker_id == worker_id,
+                    OrderNotification.status == "processing",
+                )
+                .values(
+                    status=next_status,
+                    available_at=next_available,
+                    last_error=str(exc)[:1000],
+                    lease_expires_at=None,
+                    worker_id=None,
+                )
+            )
+            await db.commit()
             logger.exception("order_notification_failed", extra={"notification_id": notification.id})
-        await db.commit()
     return processed
