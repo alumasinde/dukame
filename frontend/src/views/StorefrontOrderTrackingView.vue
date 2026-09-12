@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
-import { getOrderTracking, type OrderTracking } from '../lib/cart'
+import { getOrderTracking, retryStorefrontPayment, type OrderTracking } from '../lib/cart'
+import { formatKenyaPhoneDisplay } from '../lib/phone'
 import { APP_NAME, APP_MARK } from '../lib/branding'
 
 const route = useRoute()
@@ -10,11 +11,38 @@ const token = String(route.params.trackingToken)
 const order = ref<OrderTracking | null>(null)
 const loading = ref(true)
 const refreshing = ref(false)
+const retrying = ref(false)
 const error = ref('')
+const paymentNote = ref('')
 let timer: ReturnType<typeof setInterval> | undefined
 
 const terminal = computed(() => order.value?.status.is_terminal ?? false)
 const lastUpdated = computed(() => order.value ? new Intl.DateTimeFormat('en-KE', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(order.value.updated_at)) : '')
+const payment = computed(() => order.value?.payment || null)
+const canRetryStk = computed(() => {
+  const p = payment.value
+  if (!p) return false
+  if (p.method.code !== 'mpesa') return false
+  if (p.method.payment_type && p.method.payment_type !== 'stk_push') return false
+  return ['failed', 'pending', 'processing'].includes(p.status)
+})
+const paymentBadgeLabel = computed(() => {
+  const status = payment.value?.status
+  if (status === 'paid') return 'Paid'
+  if (status === 'processing') return 'Awaiting PIN'
+  if (status === 'failed') return 'Failed'
+  if (status === 'pending') return 'Pending'
+  return status || 'Pending'
+})
+const paymentMessage = computed(() => {
+  const p = payment.value
+  if (!p) return 'No payment is attached to this order yet.'
+  if (p.status === 'paid') return `Payment received${p.provider_reference ? ` · Ref ${p.provider_reference}` : ''}.`
+  if (p.status === 'processing') return 'Check your phone for the M-Pesa prompt and enter your PIN. Never share your PIN with anyone.'
+  if (p.status === 'failed') return p.failure_reason || 'Payment could not be completed. You can request a new M-Pesa prompt.'
+  if (p.method.code === 'cash') return 'Pay in cash when your order is delivered or collected.'
+  return 'Your payment is awaiting confirmation.'
+})
 
 function money(minor: number, currency: string) {
   return new Intl.NumberFormat('en-KE', { style: 'currency', currency, maximumFractionDigits: 2 }).format(minor / 100)
@@ -40,10 +68,25 @@ async function load(initial = false) {
   }
 }
 
+async function retryPayment() {
+  if (!canRetryStk.value || retrying.value) return
+  retrying.value = true
+  paymentNote.value = ''
+  try {
+    const response = await retryStorefrontPayment(storeSlug, token)
+    if (order.value) order.value.payment = response.data
+    paymentNote.value = 'A new M-Pesa prompt has been sent. Check your phone.'
+  } catch (err: any) {
+    paymentNote.value = err?.response?.data?.detail?.message || err?.response?.data?.detail || 'We could not send a new M-Pesa prompt. Try again shortly.'
+  } finally {
+    retrying.value = false
+  }
+}
+
 onMounted(async () => {
   await load(true)
   timer = setInterval(() => {
-    if (!terminal.value) void load()
+    if (!terminal.value || payment.value?.status === 'processing') void load()
   }, 5000)
 })
 
@@ -70,6 +113,22 @@ onBeforeUnmount(() => {
       <div class="order-tracking-heading">
         <div><span class="storefront-eyebrow">Order tracking</span><h1>Order #{{ order.order_number }}</h1><p>Hi {{ order.customer_first_name }}, your order is being updated automatically.</p></div>
         <span class="order-live" :class="{ complete: terminal }"><span />{{ refreshing ? 'Updating…' : terminal ? 'Order complete' : 'Live updates' }}</span>
+      </div>
+
+      <div v-if="payment" class="order-payment-card" :class="`is-${payment.status}`">
+        <div class="order-payment-head">
+          <div>
+            <strong>{{ payment.method.name }}</strong>
+            <span>{{ money(payment.amount_minor, payment.currency) }}</span>
+          </div>
+          <span class="order-payment-badge" :class="payment.status">{{ paymentBadgeLabel }}</span>
+        </div>
+        <p>{{ paymentMessage }}</p>
+        <p v-if="paymentNote" class="storefront-phone-hint ok">{{ paymentNote }}</p>
+        <div class="order-payment-actions">
+          <button v-if="payment.status === 'processing'" type="button" class="button button-secondary" :disabled="refreshing" @click="load()">Refresh status</button>
+          <button v-if="canRetryStk" type="button" class="button button-primary" :disabled="retrying" @click="retryPayment">{{ retrying ? 'Sending…' : payment.status === 'processing' ? 'Resend M-Pesa prompt' : 'Retry M-Pesa payment' }}</button>
+        </div>
       </div>
 
       <div class="order-tracking-grid">
