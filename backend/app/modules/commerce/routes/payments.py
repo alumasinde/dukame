@@ -18,7 +18,7 @@ from app.modules.commerce.models.payment_method import PaymentMethod
 from app.modules.commerce.payment_security import decrypt_config, encrypt_config
 from app.modules.commerce.payment_service import PaymentService, payment_list_response, payment_response
 from app.modules.commerce.schemas import PaymentListItemResponse, PaymentMethodCreate, PaymentMethodResponse, PaymentMethodUpdate, PaymentResponse
-from app.modules.commerce.mpesa import MpesaClient, MpesaProviderError
+from app.modules.commerce.mpesa import MpesaClient, MpesaProviderError, validate_daraja_config
 from app.modules.storefront.routes import get_active_store
 
 router = APIRouter(tags=["payments"])
@@ -149,12 +149,14 @@ async def test_payment_method(tenant_public_id: str, method_public_id: str, user
     callback_token = config.get("callback_token")
     if not callback_token:
         raise HTTPException(status_code=503, detail="M-Pesa callback is not configured")
+    callback_url = PaymentService._callback_url(callback_token)
     try:
-        await MpesaClient(config, PaymentService._callback_url(callback_token))._access_token()
+        cleaned = validate_daraja_config(config, callback_url=callback_url)
+        await MpesaClient(cleaned, callback_url)._access_token()
     except (MpesaProviderError, HTTPException) as exc:
         detail = exc.detail if isinstance(exc, HTTPException) else str(exc)
         raise HTTPException(status_code=502, detail=f"M-Pesa connection failed: {detail}") from exc
-    return {"status": "ok", "message": f"M-Pesa Daraja {config.get('environment', 'sandbox')} connection is working."}
+    return {"status": "ok", "message": f"M-Pesa Daraja {cleaned.get('environment', 'sandbox')} connection is working."}
 
 
 @router.get("/tenants/{tenant_public_id}/payments", response_model=list[PaymentListItemResponse])
