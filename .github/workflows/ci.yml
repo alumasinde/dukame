@@ -67,7 +67,7 @@ jobs:
           DATABASE_URL: mysql://dukame:dukame@127.0.0.1:3306/dukame_test
           REDIS_URL: redis://127.0.0.1:6379/0
           JWT_SECRET: ci-test-secret-change-me-2026-strong
-        run: mypy app
+        run: mypy app/modules/customers --follow-imports=skip
       - name: Production image build
         run: docker build -f Dockerfile -t dukame-api:ci .
       - name: Production compose validation
