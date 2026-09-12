@@ -84,40 +84,70 @@ def set_cart_cookie(response: Response, store: Store, token: str) -> None:
 
 
 @router.get("/{store_slug}/cart", response_model=CartResponse)
-async def get_cart(store_slug: str, response: Response, dukame_cart: str | None = Cookie(default=None), db: AsyncSession = Depends(get_db)) -> CartResponse:
+async def get_cart(
+    store_slug: str,
+    response: Response,
+    dukame_cart: str | None = Cookie(default=None),
+    db: AsyncSession = Depends(get_db),
+) -> CartResponse:
     store = await get_store(db, store_slug)
-    cart = await CommerceService(db).get_or_create_cart(store, dukame_cart)
-    set_cart_cookie(response, store, cart.token)
+    service = CommerceService(db)
+    cart, token, created = await service.get_or_create_cart(store, dukame_cart)
+    if created:
+        await db.commit()
+    cart = await service._load_cart(cart.id)
+    set_cart_cookie(response, store, token)
     return cart_response(cart)
-
 
 @router.get("/{store_slug}/payment-methods", response_model=list)
 async def list_storefront_payment_methods(store_slug: str, db: AsyncSession = Depends(get_db)):
     store = await get_store(db, store_slug)
-    return await PaymentService(db).list_storefront_methods(store)
+    return await PaymentService(db).list_public_methods(store)
 
 
 @router.post("/{store_slug}/cart/items", response_model=CartResponse)
-async def add_cart_item(store_slug: str, payload: CartItemAdd, response: Response, dukame_cart: str | None = Cookie(default=None), db: AsyncSession = Depends(get_db)) -> CartResponse:
+async def add_cart_item(
+    store_slug: str,
+    payload: CartItemAdd,
+    response: Response,
+    dukame_cart: str | None = Cookie(default=None),
+    db: AsyncSession = Depends(get_db),
+) -> CartResponse:
     store = await get_store(db, store_slug)
     cart = await CommerceService(db).add_item(store, dukame_cart, payload)
-    set_cart_cookie(response, store, cart.token)
+    if dukame_cart:
+        set_cart_cookie(response, store, dukame_cart)
     return cart_response(cart)
 
 
 @router.patch("/{store_slug}/cart/items/{item_public_id}", response_model=CartResponse)
-async def update_cart_item(store_slug: str, item_public_id: str, payload: CartItemUpdate, response: Response, dukame_cart: str | None = Cookie(default=None), db: AsyncSession = Depends(get_db)) -> CartResponse:
+async def update_cart_item(
+    store_slug: str,
+    item_public_id: str,
+    payload: CartItemUpdate,
+    response: Response,
+    dukame_cart: str | None = Cookie(default=None),
+    db: AsyncSession = Depends(get_db),
+) -> CartResponse:
     store = await get_store(db, store_slug)
     cart = await CommerceService(db).update_item(store, dukame_cart, item_public_id, payload)
-    set_cart_cookie(response, store, cart.token)
+    if dukame_cart:
+        set_cart_cookie(response, store, dukame_cart)
     return cart_response(cart)
 
 
 @router.delete("/{store_slug}/cart/items/{item_public_id}", response_model=CartResponse)
-async def delete_cart_item(store_slug: str, item_public_id: str, response: Response, dukame_cart: str | None = Cookie(default=None), db: AsyncSession = Depends(get_db)) -> CartResponse:
+async def delete_cart_item(
+    store_slug: str,
+    item_public_id: str,
+    response: Response,
+    dukame_cart: str | None = Cookie(default=None),
+    db: AsyncSession = Depends(get_db),
+) -> CartResponse:
     store = await get_store(db, store_slug)
     cart = await CommerceService(db).remove_item(store, dukame_cart, item_public_id)
-    set_cart_cookie(response, store, cart.token)
+    if dukame_cart:
+        set_cart_cookie(response, store, dukame_cart)
     return cart_response(cart)
 
 
