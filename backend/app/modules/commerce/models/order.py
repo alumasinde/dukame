@@ -30,6 +30,13 @@ class Order(Base):
     customer_last_name: Mapped[str] = mapped_column(String(100), nullable=False)
     customer_email: Mapped[str | None] = mapped_column(String(320))
     customer_phone: Mapped[str] = mapped_column(String(32), nullable=False)
+    
+    # Delivery details
+    delivery_address: Mapped[str] = mapped_column(String(500), nullable=False)
+    delivery_landmark: Mapped[str | None] = mapped_column(String(500))
+    delivery_notes: Mapped[str | None] = mapped_column(String(1000))
+    delivery_option: Mapped[str] = mapped_column(String(50), nullable=False, default="standard")
+    
     notes: Mapped[str | None] = mapped_column(String(1000))
     currency: Mapped[str] = mapped_column(String(3), nullable=False)
     subtotal_minor: Mapped[int] = mapped_column(Integer, nullable=False)
