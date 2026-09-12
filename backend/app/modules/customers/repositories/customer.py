@@ -1,3 +1,4 @@
+import builtins
 from typing import cast
 
 from sqlalchemy import func, select
@@ -55,7 +56,7 @@ class CustomerRepository:
             return None
         return cast(Customer, row[0]), int(row[1])
 
-    async def list_orders(self, store_id: int, customer_id: int, offset: int, limit: int) -> list[Order]:
+    async def list_orders(self, store_id: int, customer_id: int, offset: int, limit: int) -> builtins.list[Order]:
         stmt = (
             select(Order)
             .join(OrderStatus, OrderStatus.id == Order.status_id)
@@ -64,4 +65,4 @@ class CustomerRepository:
             .offset(offset)
             .limit(limit)
         )
-        return list((await self.db.scalars(stmt)).all())
+        return builtins.list((await self.db.scalars(stmt)).all())
