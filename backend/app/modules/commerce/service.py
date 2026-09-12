@@ -22,6 +22,7 @@ from app.modules.catalogue.services.context import resolve_store
 from app.modules.commerce.models.cart import Cart
 from app.modules.commerce.models.cart_item import CartItem
 from app.modules.commerce.models.idempotency_key import IdempotencyKey
+from app.modules.commerce.models.inventory_movement import InventoryMovement
 from app.modules.commerce.models.order import Order
 from app.modules.commerce.models.order_item import OrderItem
 from app.modules.commerce.models.order_status import OrderStatus
@@ -178,10 +179,16 @@ class CommerceService:
             if variant:
                 label = ", ".join(f"{link.option_value.option.name}: {link.option_value.name}" for link in variant.option_value_links if link.option_value and link.option_value.option) or None
                 sku = variant.sku or product.sku
-            self.db.add(OrderItem(public_id=secrets.token_hex(16), order_id=order.id, product_id=product.id, variant_id=variant.id if variant else None, product_name=product.name, variant_label=label, sku=sku, quantity=item.quantity, unit_price_minor=unit_price, line_total_minor=unit_price * item.quantity))
+            order_item_public_id = secrets.token_hex(16)
+            self.db.add(OrderItem(public_id=order_item_public_id, order_id=order.id, product_id=product.id, variant_id=variant.id if variant else None, product_name=product.name, variant_label=label, sku=sku, quantity=item.quantity, unit_price_minor=unit_price, line_total_minor=unit_price * item.quantity))
             inventory_owner = variant or product
             if inventory_owner.inventory_tracking:
-                inventory_owner.inventory_quantity -= item.quantity
+                quantity_before = inventory_owner.inventory_quantity
+                quantity_after = quantity_before - item.quantity
+                if quantity_after < 0:
+                    raise HTTPException(status_code=409, detail=f"Only {quantity_before} item(s) are available")
+                inventory_owner.inventory_quantity = quantity_after
+                self.db.add(InventoryMovement(public_id=secrets.token_hex(16), store_id=store.id, product_id=product.id, variant_id=variant.id if variant else None, movement_type="sale", quantity=item.quantity, quantity_before=quantity_before, quantity_after=quantity_after, reference_type="order_item", reference_id=order_item_public_id, reason="Order checkout"))
         await queue_order_sms(self.db, order, initial_status, store.name, store.slug)
         payment = await PaymentService(self.db).prepare_order_payment(store, order, payload.payment_method_public_id)
         cart.checked_out_at = datetime.now(UTC)
@@ -245,6 +252,8 @@ class CommerceService:
         if transition is None or transition.permission is None:
             raise HTTPException(status_code=409, detail="The requested order transition is not configured")
         await require_permission(self.db, user, store.tenant_id, transition.permission.key)
+        if status.code == "cancelled":
+            await self._restore_cancelled_order_inventory(order, store.id, user.id)
         order.status_id = status.id
         self.db.add(OrderStatusHistory(order_id=order.id, status_id=status.id, actor_user_id=user.id, source="merchant"))
         await queue_order_sms(self.db, order, status, store.name, store.slug)
@@ -260,6 +269,24 @@ class CommerceService:
                     return await self._load_order_by_public_id(store.id, existing.resource_public_id)
             raise
         return await self._load_order(order.id)
+
+    async def _restore_cancelled_order_inventory(self, order: Order, store_id: int, actor_user_id: int) -> None:
+        items = list((await self.db.scalars(select(OrderItem).where(OrderItem.order_id == order.id).order_by(OrderItem.id))).all())
+        for item in items:
+            owner: Product | ProductVariant | None
+            if item.variant_id is not None:
+                owner = await self._lock_variant(item.variant_id)
+            else:
+                owner = await self._lock_product(item.product_id)
+            if owner is None or not owner.inventory_tracking:
+                continue
+            existing_return = await self.db.scalar(select(InventoryMovement).where(InventoryMovement.store_id == store_id, InventoryMovement.reference_type == "order_item", InventoryMovement.reference_id == item.public_id, InventoryMovement.movement_type == "return").with_for_update())
+            if existing_return is not None:
+                continue
+            quantity_before = owner.inventory_quantity
+            quantity_after = quantity_before + item.quantity
+            owner.inventory_quantity = quantity_after
+            self.db.add(InventoryMovement(public_id=secrets.token_hex(16), store_id=store_id, product_id=item.product_id, variant_id=item.variant_id, movement_type="return", quantity=item.quantity, quantity_before=quantity_before, quantity_after=quantity_after, reference_type="order_item", reference_id=item.public_id, reason="Order cancellation", actor_user_id=actor_user_id))
 
     async def list_statuses(self, user: User, tenant_public_id: str) -> list[OrderStatus]:
         await resolve_store(self.db, user, tenant_public_id, "orders.read")
