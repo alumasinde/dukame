@@ -4,7 +4,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "0023_order_delivery"
-down_revision = "0022_inventory_movement_idempotency"
+down_revision = "0022_inventory_movement_idemp"
 branch_labels = None
 depends_on = None
 
