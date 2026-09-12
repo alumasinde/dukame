@@ -166,14 +166,25 @@ def downgrade() -> None:
         sa.column("id", sa.BigInteger),
         sa.column("key", sa.String(150)),
     )
-    transition_table = sa.table(
-        "order_status_transitions",
+    role_permissions = sa.table(
+        "tenant_role_permissions",
+        sa.column("role_id", sa.BigInteger),
         sa.column("permission_id", sa.BigInteger),
     )
 
-    bind.execute(
-        sa.update(transition_table).values(permission_id=None)
+    keys = [key for key, _ in PERMISSIONS]
+    permission_ids = list(
+        bind.execute(
+            sa.select(permission_table.c.id).where(permission_table.c.key.in_(keys))
+        ).scalars()
     )
+    if permission_ids:
+        bind.execute(
+            sa.delete(role_permissions).where(
+                role_permissions.c.permission_id.in_(permission_ids)
+            )
+        )
+
     op.drop_index(
         "ix_order_status_transitions_permission",
         table_name="order_status_transitions",
@@ -185,20 +196,7 @@ def downgrade() -> None:
     )
     op.drop_column("order_status_transitions", "permission_id")
 
-    keys = [key for key, _ in PERMISSIONS]
-    permission_ids = list(
-        bind.execute(
-            sa.select(permission_table.c.id).where(permission_table.c.key.in_(keys))
-        ).scalars()
-    )
     if permission_ids:
-        bind.execute(
-            sa.text(
-                "DELETE FROM tenant_role_permissions WHERE permission_id IN "
-                "(SELECT id FROM permissions WHERE key IN :keys)"
-            ).bindparams(sa.bindparam("keys", expanding=True)),
-            {"keys": keys},
-        )
         bind.execute(
             sa.delete(permission_table).where(permission_table.c.id.in_(permission_ids))
         )
