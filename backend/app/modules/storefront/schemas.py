@@ -59,6 +59,7 @@ class StorefrontResponse(BaseModel):
     description: str | None
     contact_phone: str | None = None
     currency: str
+    status: str = "active"
     categories: list[StorefrontCategory]
     products: list[StorefrontProduct]
     total_products: int = 0

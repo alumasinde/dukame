@@ -20,6 +20,13 @@ class CheckoutRequest(BaseModel):
     payment_method_public_id: str | None = Field(default=None, min_length=1, max_length=32)
 
 
+class OrderLookupRequest(BaseModel):
+    """Public order lookup without magic tracking link."""
+
+    order_number: str = Field(min_length=1, max_length=32)
+    phone: str = Field(min_length=7, max_length=32)
+
+
 class PaymentMethodResponse(BaseModel):
     public_id: str
     code: str
