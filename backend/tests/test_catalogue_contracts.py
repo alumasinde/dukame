@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from app.modules.catalogue.schemas.product import ProductCreate
+from app.modules.catalogue.schemas.product import ProductCreate, ProductUpdate
 from app.modules.catalogue.schemas.store import StoreCreate
 
 
@@ -32,3 +32,19 @@ def test_product_accepts_valid_compare_at_price() -> None:
         status="active",
     )
     assert payload.compare_at_price_minor == 10000
+
+
+@pytest.mark.parametrize("field", ["name", "slug", "price_minor", "currency", "inventory_tracking", "status"])
+def test_product_update_rejects_null_for_required_fields(field: str) -> None:
+    with pytest.raises(ValidationError):
+        ProductUpdate(**{field: None})
+
+
+def test_product_update_allows_clearing_optional_fields() -> None:
+    payload = ProductUpdate(description=None, sku=None, compare_at_price_minor=None, category_public_id=None)
+    assert payload.model_dump(exclude_unset=True) == {
+        "description": None,
+        "sku": None,
+        "compare_at_price_minor": None,
+        "category_public_id": None,
+    }
