@@ -50,6 +50,8 @@ class VariantService:
         if variant is None:
             raise HTTPException(status_code=404, detail="Variant not found")
         values = payload.model_dump(exclude_unset=True)
+        if "inventory_quantity" in values:
+            raise HTTPException(status_code=409, detail="Inventory quantity must be changed through the inventory adjustment API")
         option_ids = values.pop("option_value_public_ids", None)
         if option_ids is not None:
             option_values = await self._validate_values(store.id, option_ids)
