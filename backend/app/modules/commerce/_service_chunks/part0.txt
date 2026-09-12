@@ -1,1 +1,175 @@
-CHUNK0
+from __future__ import annotations
+
+import hashlib
+import json
+import secrets
+from datetime import UTC, datetime, timedelta
+
+from fastapi import HTTPException
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
+from app.core.config import settings
+from app.modules.auth.models.identity import User
+from app.modules.catalogue.models.option_value import ProductOptionValue
+from app.modules.catalogue.models.product import Product
+from app.modules.catalogue.models.store import Store
+from app.modules.catalogue.models.variant import ProductVariant
+from app.modules.catalogue.models.variant_option_value import ProductVariantOptionValue
+from app.modules.catalogue.services.context import resolve_store
+from app.modules.commerce.audit_service import record_audit
+from app.modules.commerce.models.cart import Cart
+from app.modules.commerce.models.cart_item import CartItem
+from app.modules.commerce.models.idempotency_key import IdempotencyKey
+from app.modules.commerce.models.inventory_movement import InventoryMovement
+from app.modules.commerce.models.order import Order
+from app.modules.commerce.models.order_item import OrderItem
+from app.modules.commerce.models.order_status import OrderStatus
+from app.modules.commerce.models.order_status_history import OrderStatusHistory
+from app.modules.commerce.models.order_status_transition import OrderStatusTransition
+from app.modules.commerce.models.payment import Payment
+from app.modules.commerce.notifications import normalize_phone, queue_order_sms
+from app.modules.commerce.payment_service import PaymentService
+from app.modules.commerce.schemas import CartItemAdd, CartItemUpdate, CheckoutRequest, OrderStatusUpdate
+from app.modules.commerce.tracking import tracking_token, tracking_token_hash
+from app.modules.customers.models.customer import Customer
+from app.modules.rbac.services.rbac import require_permission
+
+
+class CommerceService:
+    def __init__(self, db: AsyncSession) -> None:
+        self.db = db
+
+    @staticmethod
+    def _ensure_tz_aware(dt: datetime | None) -> datetime | None:
+        if dt is None:
+            return None
+        return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
+
+    @staticmethod
+    def _idempotency_hash(payload: object) -> str:
+        encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+        return hashlib.sha256(encoded).hexdigest()
+
+    @staticmethod
+    def _validate_idempotency_key(key: str | None) -> str | None:
+        if key is None:
+            return None
+        value = key.strip()
+        if not value or len(value) > 128:
+            raise HTTPException(status_code=400, detail="Invalid Idempotency-Key")
+        return value
+
+    async def _find_idempotency(self, store_id: int, operation: str, scope_key: str, key: str) -> IdempotencyKey | None:
+        return await self.db.scalar(select(IdempotencyKey).where(IdempotencyKey.store_id == store_id, IdempotencyKey.operation == operation, IdempotencyKey.scope_key == scope_key, IdempotencyKey.key == key).with_for_update())
+
+    async def _claim_idempotency(self, store_id: int, operation: str, scope_key: str, key: str, request_hash: str) -> IdempotencyKey | None:
+        existing = await self._find_idempotency(store_id, operation, scope_key, key)
+        if existing is not None:
+            if existing.request_hash != request_hash:
+                raise HTTPException(status_code=409, detail="Idempotency-Key was already used with a different request")
+            return existing
+        return None
+
+    async def get_or_create_cart(self, store: Store, token: str | None) -> tuple[Cart, str, bool]:
+        if token:
+            cart = await self._cart_by_token(store.id, token, lock=False)
+            now = datetime.now(UTC)
+            if cart is not None and cart.checked_out_at is None:
+                expires_at = self._ensure_tz_aware(cart.expires_at)
+                if expires_at > now:
+                    return cart, token, False
+        raw_token = secrets.token_urlsafe(32)
+        now = datetime.now(UTC)
+        cart = Cart(public_id=secrets.token_hex(16), store_id=store.id, session_token_hash=self._hash_token(raw_token), currency=store.currency, expires_at=now + timedelta(seconds=settings.cart_session_ttl_seconds))
+        self.db.add(cart)
+        await self.db.flush()
+        return cart, raw_token, True
+
+    async def read_cart(self, store: Store, token: str | None) -> Cart:
+        cart, _, created = await self.get_or_create_cart(store, token)
+        if created:
+            await self.db.commit()
+        return await self._load_cart(cart.id)
+
+    async def add_item(self, store: Store, token: str, payload: CartItemAdd) -> Cart:
+        self._ensure_quantity(payload.quantity)
+        cart = await self._require_cart(store.id, token)
+        product = await self._product_for_cart(store.id, payload.product_public_id)
+        variant = await self._resolve_variant(store.id, product, payload.variant_public_id)
+        unit_price = variant.price_minor if variant and variant.price_minor is not None else product.price_minor
+        existing = await self.db.scalar(select(CartItem).where(CartItem.cart_id == cart.id, CartItem.product_id == product.id, CartItem.variant_id == (variant.id if variant else None)))
+        new_quantity = (existing.quantity if existing else 0) + payload.quantity
+        self._ensure_quantity(new_quantity)
+        self._ensure_stock(product, variant, new_quantity)
+        if existing:
+            existing.quantity = new_quantity
+            existing.unit_price_minor = unit_price
+        else:
+            self.db.add(CartItem(public_id=secrets.token_hex(16), cart_id=cart.id, product_id=product.id, variant_id=variant.id if variant else None, quantity=payload.quantity, unit_price_minor=unit_price))
+        await self.db.commit()
+        return await self._load_cart(cart.id)
+
+    async def update_item(self, store: Store, token: str, item_public_id: str, payload: CartItemUpdate) -> Cart:
+        self._ensure_quantity(payload.quantity)
+        cart = await self._require_cart(store.id, token)
+        item = await self.db.scalar(select(CartItem).options(selectinload(CartItem.product), selectinload(CartItem.variant)).where(CartItem.cart_id == cart.id, CartItem.public_id == item_public_id))
+        if item is None:
+            raise HTTPException(status_code=404, detail="Cart item not found")
+        self._ensure_stock(item.product, item.variant, payload.quantity)
+        item.quantity = payload.quantity
+        await self.db.commit()
+        return await self._load_cart(cart.id)
+
+    async def remove_item(self, store: Store, token: str, item_public_id: str) -> Cart:
+        cart = await self._require_cart(store.id, token)
+        item = await self.db.scalar(select(CartItem).where(CartItem.cart_id == cart.id, CartItem.public_id == item_public_id))
+        if item is None:
+            raise HTTPException(status_code=404, detail="Cart item not found")
+        await self.db.delete(item)
+        await self.db.commit()
+        return await self._load_cart(cart.id)
+
+    async def _resolve_checkout_customer(self, store: Store, payload: CheckoutRequest) -> Customer | None:
+        phone = normalize_phone(payload.phone)
+        if not phone:
+            return None
+        customer = await self.db.scalar(select(Customer).where(Customer.store_id == store.id, Customer.phone == phone).with_for_update())
+        if customer is not None:
+            return customer
+        customer = Customer(
+            public_id=secrets.token_hex(16),
+            store_id=store.id,
+            first_name=payload.first_name.strip(),
+            last_name=payload.last_name.strip(),
+            phone=phone,
+            email=payload.email.strip().lower() if payload.email else None,
+            notes=None,
+        )
+        try:
+            async with self.db.begin_nested():
+                self.db.add(customer)
+                await self.db.flush()
+                await record_audit(
+                    self.db,
+                    tenant_id=store.tenant_id,
+                    store_id=store.id,
+                    actor_user_id=None,
+                    action="customer.created",
+                    entity_type="customer",
+                    entity_public_id=customer.public_id,
+                    after={
+                        "first_name": customer.first_name,
+                        "last_name": customer.last_name,
+                        "phone": customer.phone,
+                        "email": customer.email,
+                        "is_active": customer.is_active,
+                        "source": "checkout",
+                    },
+                )
+        except IntegrityError:
+            customer = await self.db.scalar(select(Customer).where(Customer.store_id == store.id, Customer.phone == phone).with_for_update())
+            if customer is None:
+                
