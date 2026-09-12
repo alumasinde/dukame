@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,7 +9,7 @@ from app.modules.catalogue.models.store import Store
 from app.modules.commerce.models.cart import Cart
 from app.modules.commerce.models.order import Order
 from app.modules.commerce.payment_service import payment_response
-from app.modules.commerce.schemas import CartItemAdd, CartItemUpdate, CartResponse, CheckoutRequest, OrderResponse, OrderStatusHistoryResponse, OrderStatusResponse, OrderTrackingResponse
+from app.modules.commerce.schemas import CartItemAdd, CartItemUpdate, CartResponse, CheckoutRequest, OrderResponse, OrderStatusHistoryResponse, OrderStatusResponse
 from app.modules.commerce.service import CommerceService
 from app.modules.commerce.tracking import tracking_token as make_tracking_token
 from app.modules.commerce.tracking import tracking_url
@@ -98,11 +98,11 @@ async def delete_cart_item(store_slug: str, item_public_id: str, dukame_cart: st
 
 
 @router.post("/{store_slug}/cart/checkout", response_model=OrderResponse, status_code=status.HTTP_201_CREATED)
-async def checkout(store_slug: str, payload: CheckoutRequest, response: Response, dukame_cart: str | None = Cookie(default=None), db: AsyncSession = Depends(get_db)) -> OrderResponse:
+async def checkout(store_slug: str, payload: CheckoutRequest, response: Response, dukame_cart: str | None = Cookie(default=None), idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"), db: AsyncSession = Depends(get_db)) -> OrderResponse:
     store = await get_store(db, store_slug)
     if not dukame_cart:
         raise HTTPException(status_code=422, detail="Your cart is empty")
-    order = await CommerceService(db).checkout(store, dukame_cart, payload)
+    order = await CommerceService(db).checkout(store, dukame_cart, payload, idempotency_key)
     response.delete_cookie("dukame_cart", path=f"/api/v1/storefront/{store.slug}")
     return order_response(order, include_tracking=True, store_slug=store.slug, store_name=store.name)
 
