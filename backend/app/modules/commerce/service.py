@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import secrets
 from datetime import UTC, datetime, timedelta
 
 from fastapi import HTTPException
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -19,6 +21,7 @@ from app.modules.catalogue.models.variant_option_value import ProductVariantOpti
 from app.modules.catalogue.services.context import resolve_store
 from app.modules.commerce.models.cart import Cart
 from app.modules.commerce.models.cart_item import CartItem
+from app.modules.commerce.models.idempotency_key import IdempotencyKey
 from app.modules.commerce.models.order import Order
 from app.modules.commerce.models.order_item import OrderItem
 from app.modules.commerce.models.order_status import OrderStatus
@@ -41,6 +44,31 @@ class CommerceService:
         if dt is None:
             return None
         return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
+
+    @staticmethod
+    def _idempotency_hash(payload: object) -> str:
+        encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+        return hashlib.sha256(encoded).hexdigest()
+
+    @staticmethod
+    def _validate_idempotency_key(key: str | None) -> str | None:
+        if key is None:
+            return None
+        value = key.strip()
+        if not value or len(value) > 128:
+            raise HTTPException(status_code=400, detail="Invalid Idempotency-Key")
+        return value
+
+    async def _find_idempotency(self, store_id: int, operation: str, scope_key: str, key: str) -> IdempotencyKey | None:
+        return await self.db.scalar(select(IdempotencyKey).where(IdempotencyKey.store_id == store_id, IdempotencyKey.operation == operation, IdempotencyKey.scope_key == scope_key, IdempotencyKey.key == key).with_for_update())
+
+    async def _claim_idempotency(self, store_id: int, operation: str, scope_key: str, key: str, request_hash: str) -> IdempotencyKey | None:
+        existing = await self._find_idempotency(store_id, operation, scope_key, key)
+        if existing is not None:
+            if existing.request_hash != request_hash:
+                raise HTTPException(status_code=409, detail="Idempotency-Key was already used with a different request")
+            return existing
+        return None
 
     async def get_or_create_cart(self, store: Store, token: str | None) -> tuple[Cart, str, bool]:
         if token:
@@ -101,11 +129,19 @@ class CommerceService:
         await self.db.commit()
         return await self._load_cart(cart.id)
 
-    async def checkout(self, store: Store, token: str, payload: CheckoutRequest) -> Order:
+    async def checkout(self, store: Store, token: str, payload: CheckoutRequest, idempotency_key: str | None = None) -> Order:
+        key = self._validate_idempotency_key(idempotency_key)
+        request_hash = self._idempotency_hash(payload.model_dump(mode="json"))
         cart = await self._cart_by_token(store.id, token, lock=True)
+        if cart is None:
+            raise HTTPException(status_code=409, detail="Your cart has expired. Please start a new cart.")
+        if key:
+            existing = await self._claim_idempotency(store.id, "commerce.checkout", cart.public_id, key, request_hash)
+            if existing is not None:
+                return await self._load_order_by_public_id(store.id, existing.resource_public_id)
         now = datetime.now(UTC)
-        expires_at = self._ensure_tz_aware(cart.expires_at) if cart else None
-        if cart is None or cart.checked_out_at is not None or expires_at is None or expires_at <= now:
+        expires_at = self._ensure_tz_aware(cart.expires_at)
+        if cart.checked_out_at is not None or expires_at is None or expires_at <= now:
             raise HTTPException(status_code=409, detail="Your cart has expired. Please start a new cart.")
         items = list((await self.db.scalars(select(CartItem).options(selectinload(CartItem.product).selectinload(Product.media), selectinload(CartItem.variant).selectinload(ProductVariant.option_value_links).selectinload(ProductVariantOptionValue.option_value).selectinload(ProductOptionValue.option)).where(CartItem.cart_id == cart.id).with_for_update())).all())
         if not items:
@@ -149,7 +185,17 @@ class CommerceService:
         await queue_order_sms(self.db, order, initial_status, store.name, store.slug)
         payment = await PaymentService(self.db).prepare_order_payment(store, order, payload.payment_method_public_id)
         cart.checked_out_at = datetime.now(UTC)
-        await self.db.commit()
+        if key:
+            self.db.add(IdempotencyKey(store_id=store.id, operation="commerce.checkout", scope_key=cart.public_id, key=key, request_hash=request_hash, resource_public_id=order.public_id, response_status_code=201))
+        try:
+            await self.db.commit()
+        except IntegrityError:
+            await self.db.rollback()
+            if key:
+                existing = await self._claim_idempotency(store.id, "commerce.checkout", cart.public_id, key, request_hash)
+                if existing is not None:
+                    return await self._load_order_by_public_id(store.id, existing.resource_public_id)
+            raise
         if payment.payment_method.code == "mpesa":
             try:
                 await PaymentService(self.db).initiate(payment.public_id)
@@ -175,11 +221,17 @@ class CommerceService:
             raise HTTPException(status_code=404, detail="Order not found")
         return order
 
-    async def update_order_status(self, user: User, tenant_public_id: str, public_id: str, payload: OrderStatusUpdate) -> Order:
+    async def update_order_status(self, user: User, tenant_public_id: str, public_id: str, payload: OrderStatusUpdate, idempotency_key: str | None = None) -> Order:
         store = await resolve_store(self.db, user, tenant_public_id, "orders.read")
+        key = self._validate_idempotency_key(idempotency_key)
+        request_hash = self._idempotency_hash(payload.model_dump(mode="json"))
         order = await self._load_order_by_public_id(store.id, public_id, lock=True)
         if order is None:
             raise HTTPException(status_code=404, detail="Order not found")
+        if key:
+            existing = await self._claim_idempotency(store.id, "commerce.order_status", order.public_id, key, request_hash)
+            if existing is not None:
+                return await self._load_order_by_public_id(store.id, existing.resource_public_id)
         if order.status.is_terminal:
             raise HTTPException(status_code=409, detail="An order in a final status cannot be changed")
         if not order.status.is_active:
@@ -189,23 +241,24 @@ class CommerceService:
             raise HTTPException(status_code=422, detail="Order status not found")
         if status.id == order.status_id:
             raise HTTPException(status_code=409, detail="Order is already in this status")
-        transition = await self.db.scalar(
-            select(OrderStatusTransition)
-            .options(selectinload(OrderStatusTransition.permission))
-            .join(OrderStatus, OrderStatus.id == OrderStatusTransition.from_status_id)
-            .where(
-                OrderStatusTransition.from_status_id == order.status_id,
-                OrderStatusTransition.to_status_id == status.id,
-                OrderStatus.is_active.is_(True),
-            )
-        )
+        transition = await self.db.scalar(select(OrderStatusTransition).options(selectinload(OrderStatusTransition.permission)).join(OrderStatus, OrderStatus.id == OrderStatusTransition.from_status_id).where(OrderStatusTransition.from_status_id == order.status_id, OrderStatusTransition.to_status_id == status.id, OrderStatus.is_active.is_(True)))
         if transition is None or transition.permission is None:
             raise HTTPException(status_code=409, detail="The requested order transition is not configured")
         await require_permission(self.db, user, store.tenant_id, transition.permission.key)
         order.status_id = status.id
         self.db.add(OrderStatusHistory(order_id=order.id, status_id=status.id, actor_user_id=user.id, source="merchant"))
         await queue_order_sms(self.db, order, status, store.name, store.slug)
-        await self.db.commit()
+        if key:
+            self.db.add(IdempotencyKey(store_id=store.id, operation="commerce.order_status", scope_key=order.public_id, key=key, request_hash=request_hash, resource_public_id=order.public_id, response_status_code=200))
+        try:
+            await self.db.commit()
+        except IntegrityError:
+            await self.db.rollback()
+            if key:
+                existing = await self._claim_idempotency(store.id, "commerce.order_status", order.public_id, key, request_hash)
+                if existing is not None:
+                    return await self._load_order_by_public_id(store.id, existing.resource_public_id)
+            raise
         return await self._load_order(order.id)
 
     async def list_statuses(self, user: User, tenant_public_id: str) -> list[OrderStatus]:
