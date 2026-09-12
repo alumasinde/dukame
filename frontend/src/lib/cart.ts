@@ -25,6 +25,10 @@ export function getOrderTracking(storeSlug: string, token: string) { return api.
 export function retryStorefrontPayment(storeSlug: string, trackingToken: string) {
   return api.post<Payment>(path(storeSlug, `/order/track/${encodeURIComponent(trackingToken)}/payment/retry`))
 }
+/** Public order lookup by order number + phone (no tracking token). */
+export function lookupOrder(storeSlug: string, payload: { order_number: string; phone: string }) {
+  return api.post<OrderTracking>(path(storeSlug, '/order/lookup'), payload)
+}
 export function getPaymentMethodsForTenant(tenantPublicId: string) { return api.get<PaymentMethod[]>(`/tenants/${encodeURIComponent(tenantPublicId)}/payment-methods`) }
 export function createPaymentMethod(tenantPublicId: string, payload: { code: string; name: string; instructions?: string; is_enabled?: boolean; config?: Record<string, string> }) { return api.post<PaymentMethod>(`/tenants/${encodeURIComponent(tenantPublicId)}/payment-methods`, payload) }
 export function updatePaymentMethod(tenantPublicId: string, methodPublicId: string, payload: { name?: string; instructions?: string; is_enabled?: boolean; config?: Record<string, string> }) { return api.patch<PaymentMethod>(`/tenants/${encodeURIComponent(tenantPublicId)}/payment-methods/${encodeURIComponent(methodPublicId)}`, payload) }
