@@ -27,6 +27,8 @@ class OrderNotification(Base):
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     provider_message_id: Mapped[str | None] = mapped_column(String(255))
     last_error: Mapped[str | None] = mapped_column(Text())
+    worker_id: Mapped[str | None] = mapped_column(String(64))
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
 
@@ -36,4 +38,5 @@ class OrderNotification(Base):
     __table_args__ = (
         UniqueConstraint("order_id", "status_id", "channel", name="uq_order_notification_status_channel"),
         Index("ix_order_notifications_queue", "status", "available_at"),
+        Index("ix_order_notifications_processing_lease", "status", "lease_expires_at"),
     )

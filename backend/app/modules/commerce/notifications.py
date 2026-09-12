@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import asyncio
+import hashlib
+import json
 import logging
 import secrets
 from datetime import UTC, datetime, timedelta
@@ -97,7 +100,10 @@ async def process_notification_queue(db: AsyncSession, limit: int = 10, worker_i
         (
             await db.scalars(
                 select(OrderNotification)
-                .where(eligible, OrderNotification.attempts < settings.notification_max_attempts)
+                .where(
+                    eligible,
+                    OrderNotification.attempts < settings.notification_max_attempts,
+                )
                 .order_by(OrderNotification.created_at.asc(), OrderNotification.id.asc())
                 .limit(limit)
                 .with_for_update(skip_locked=True)
