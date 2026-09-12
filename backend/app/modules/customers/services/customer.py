@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.modules.auth.models.identity import User
 from app.modules.catalogue.services.context import resolve_store
 from app.modules.commerce.audit_service import record_audit
+from app.modules.commerce.models.order import Order
 from app.modules.commerce.notifications import normalize_phone
 from app.modules.customers.models.customer import Customer
 from app.modules.customers.repositories.customer import CustomerRepository
@@ -43,7 +44,7 @@ class CustomerService:
 
     async def orders(
         self, user: User, tenant_public_id: str, public_id: str, offset: int, limit: int
-    ) -> list:
+    ) -> list[Order]:
         store = await resolve_store(self.db, user, tenant_public_id, "customers.read")
         customer = await self.repository.get(store.id, public_id)
         if customer is None:
@@ -129,13 +130,18 @@ class CustomerService:
             "notes": customer.notes,
             "is_active": customer.is_active,
         }
+        action = "customer.updated"
+        if before["is_active"] is False and after["is_active"] is True:
+            action = "customer.activated"
+        elif before["is_active"] is True and after["is_active"] is False:
+            action = "customer.deactivated"
         try:
             await record_audit(
                 self.db,
                 tenant_id=store.tenant_id,
                 store_id=store.id,
                 actor_user_id=user.id,
-                action="customer.updated",
+                action=action,
                 entity_type="customer",
                 entity_public_id=customer.public_id,
                 before=before,
