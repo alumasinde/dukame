@@ -36,6 +36,7 @@ const router = createRouter({
     { path: '/:storeSlug/cart', name: 'storefront-cart', component: () => import('./views/CartView.vue'), meta: { storefront: true } },
     { path: '/:storeSlug/favourites', name: 'storefront-favourites', component: () => import('./views/StorefrontFavouritesView.vue'), meta: { storefront: true } },
     { path: '/:storeSlug/order/track/:trackingToken', name: 'storefront-order-tracking', component: () => import('./views/StorefrontOrderTrackingView.vue'), meta: { storefront: true } },
+    { path: '/:storeSlug/track', name: 'storefront-order-lookup', component: () => import('./views/StorefrontOrderLookupView.vue'), meta: { storefront: true } },
     { path: '/:storeSlug/c/:categorySlug', name: 'storefront-category', component: () => import('./views/StorefrontView.vue'), meta: { storefront: true } },
     { path: '/:storeSlug', name: 'storefront', component: () => import('./views/StorefrontView.vue'), meta: { storefront: true } },
     { path: '/:pathMatch(.*)*', redirect: '/login' },
