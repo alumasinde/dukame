@@ -9,6 +9,8 @@ class StoreCreate(BaseModel):
     description: str | None = Field(default=None, max_length=1000)
     status: str = Field(min_length=1, max_length=32)
     currency: str = Field(min_length=3, max_length=3)
+    sms_notifications_enabled: bool = False
+    whatsapp_notifications_enabled: bool = False
 
     @field_validator("name")
     @classmethod
@@ -34,11 +36,13 @@ class StoreUpdate(BaseModel):
     description: str | None = Field(default=None, max_length=1000)
     status: str | None = Field(default=None, min_length=1, max_length=32)
     currency: str | None = Field(default=None, min_length=3, max_length=3)
+    sms_notifications_enabled: bool | None = None
+    whatsapp_notifications_enabled: bool | None = None
 
     @model_validator(mode="before")
     @classmethod
     def reject_null_required_fields(cls, value):
-        return reject_null_fields(value, ("name", "slug", "status", "currency"))
+        return reject_null_fields(value, ("name", "slug", "status", "currency", "sms_notifications_enabled", "whatsapp_notifications_enabled"))
 
     @field_validator("name")
     @classmethod
@@ -71,3 +75,5 @@ class StoreResponse(BaseModel):
     description: str | None
     status: str
     currency: str
+    sms_notifications_enabled: bool = False
+    whatsapp_notifications_enabled: bool = False
