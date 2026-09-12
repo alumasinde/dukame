@@ -5,6 +5,7 @@ import { checkoutCart, getPaymentMethods, getOrderTracking, removeCartItem, upda
 import { useCartState } from '../lib/cart-state'
 import { formatKenyaPhoneDisplay, kenyaPhoneError, normalizeKenyaPhone } from '../lib/phone'
 import { getStorefront } from '../lib/storefront'
+import { saveCartSnapshot } from '../lib/saved-cart'
 
 const route = useRoute()
 const storeSlug = String(route.params.storeSlug)
@@ -91,15 +92,34 @@ async function submitOrder() {
   }
 }
 async function refreshPaymentStatus() { if (!order.value?.tracking_url || order.value.payment?.status !== 'processing') return; try { const token = order.value.tracking_url.split('/').pop() || ''; const response = await getOrderTracking(storeSlug, token); if (response.data.payment) order.value.payment = response.data.payment } catch { /* tracking page remains available */ } }
+function saveForLater() {
+  if (!cart.value?.items.length) return
+  saveCartSnapshot(
+    storeSlug,
+    cart.value.items.map((item) => ({
+      product_public_id: item.product_public_id,
+      product_name: item.product_name,
+      product_slug: item.product_slug,
+      variant_public_id: item.variant_public_id,
+      variant_label: item.variant_label,
+      quantity: item.quantity,
+      unit_price_minor: item.unit_price_minor,
+      image_url: item.image_url,
+      currency: item.currency,
+    })),
+  )
+  error.value = ''
+  fieldError.value = 'Cart saved on this device. You can restore it from the shop homepage later.'
+}
 onMounted(async () => { try { const [storeResponse] = await Promise.all([getStorefront(storeSlug), reconcileCart(), loadPaymentMethods()]); storeName.value = storeResponse.data.name; document.title = `Cart · ${storeName.value}` } catch (err: any) { if (!storeName.value) storeName.value = ''; if (!cart.value) error.value = apiError(err, 'We could not load this store.'); loading.value = false } })
 </script>
 
 <template>
   <main class="storefront-page" style="padding-bottom: 40px">
-    <header class="storefront-header"><RouterLink :to="`/${storeSlug}`" class="storefront-brand storefront-brand-link"><span class="storefront-mark">{{ storeName ? storeName.charAt(0).toUpperCase() : 'S' }}</span><div><strong>{{ storeName || 'Your store' }}</strong><small>Powered by DukaMe</small></div></RouterLink><RouterLink :to="`/${storeSlug}`" class="storefront-cart storefront-cart-link">Continue shopping</RouterLink></header>
+    <header class="storefront-header"><RouterLink :to="`/${storeSlug}`" class="storefront-brand storefront-brand-link"><span class="storefront-mark" aria-hidden="true">{{ storeName ? storeName.charAt(0).toUpperCase() : 'S' }}</span><div><strong>{{ storeName || 'Your store' }}</strong><small>Powered by DukaMe</small></div></RouterLink><div class="storefront-header-actions"><RouterLink :to="`/${storeSlug}/track`" class="storefront-header-link is-track">Track order</RouterLink><RouterLink :to="`/${storeSlug}`" class="storefront-cart storefront-cart-link">Continue shopping</RouterLink></div></header>
     <section class="storefront-cart-page">
       <div v-if="loading" class="storefront-state"><div class="status-spinner" /><p>Loading your cart…</p></div>
-      <div v-else-if="order" class="storefront-order-success"><div class="storefront-success-icon">✓</div><span class="storefront-eyebrow">Order received</span><h1>Thank you, {{ order.customer_first_name }}.</h1><p>Your order <strong>#{{ order.order_number }}</strong> has been received. We'll keep you updated as the store processes it.</p><div class="storefront-success-summary"><div><span>Payment</span><strong>{{ order.payment?.status === 'paid' ? 'Paid' : order.payment?.status === 'processing' ? 'Payment pending' : order.payment?.status === 'failed' ? 'Payment failed' : 'Payment pending' }}</strong></div><div><span>Total</span><strong>{{ money(order.total_minor, order.currency) }}</strong></div><div><span>Items</span><strong>{{ order.items.reduce((sum, item) => sum + item.quantity, 0) }}</strong></div></div><div v-if="paymentMessage" class="storefront-payment-result" :class="`is-${order.payment?.status || 'pending'}`"><strong>{{ order.payment?.method.name }}</strong><p>{{ paymentMessage }}</p><button v-if="order.payment?.status === 'processing'" type="button" @click="refreshPaymentStatus">Check payment status</button></div><div class="storefront-success-actions"><RouterLink v-if="trackingPath" :to="trackingPath" class="button button-primary button-lg">Track my order</RouterLink><RouterLink :to="`/${storeSlug}`" class="button button-secondary">Continue shopping</RouterLink></div><p class="storefront-success-notice">Your tracking page will show payment confirmation and order progress. Save that link.</p></div>
+      <div v-else-if="order" class="storefront-order-success"><div class="storefront-success-icon">✓</div><span class="storefront-eyebrow">Order received</span><h1>Thank you, {{ order.customer_first_name }}.</h1><p>Your order <strong>#{{ order.order_number }}</strong> has been received. We'll keep you updated as the store processes it.</p><div class="storefront-success-summary"><div><span>Payment</span><strong>{{ order.payment?.status === 'paid' ? 'Paid' : order.payment?.status === 'processing' ? 'Payment pending' : order.payment?.status === 'failed' ? 'Payment failed' : 'Payment pending' }}</strong></div><div><span>Total</span><strong>{{ money(order.total_minor, order.currency) }}</strong></div><div><span>Items</span><strong>{{ order.items.reduce((sum, item) => sum + item.quantity, 0) }}</strong></div></div><div v-if="paymentMessage" class="storefront-payment-result" :class="`is-${order.payment?.status || 'pending'}`"><strong>{{ order.payment?.method.name }}</strong><p>{{ paymentMessage }}</p><button v-if="order.payment?.status === 'processing'" type="button" @click="refreshPaymentStatus">Check payment status</button></div><div class="storefront-success-actions"><RouterLink v-if="trackingPath" :to="trackingPath" class="button button-primary button-lg">Track my order</RouterLink><RouterLink :to="`/${storeSlug}`" class="button button-secondary">Continue shopping</RouterLink></div><p class="storefront-success-notice">Your tracking page will show payment confirmation and order progress. Save that link — or find the order later with your phone on Track order.</p></div>
       <template v-else-if="cart">
         <div class="storefront-cart-heading"><div><RouterLink :to="`/${storeSlug}`" class="storefront-back">← Continue shopping</RouterLink><h1>{{ checkoutStep === 'cart' ? 'Your cart' : checkoutStep === 'shipping' ? 'Your details' : checkoutStep === 'payment' ? 'Payment' : 'Review order' }}</h1><p>{{ checkoutStep === 'cart' ? itemCountLabel : checkoutStep === 'shipping' ? 'We will use this number for M-Pesa and order updates.' : checkoutStep === 'payment' ? 'Choose how you want to pay.' : 'Confirm everything looks right before placing your order.' }}</p></div><div v-if="cart.items.length" class="storefront-cart-heading-total"><span>Total</span><strong>{{ money(cart.subtotal_minor, cart.currency) }}</strong></div></div>
         <div v-if="cart.items.length" class="storefront-checkout-progress" aria-label="Checkout progress">
@@ -111,7 +131,9 @@ onMounted(async () => { try { const [storeResponse] = await Promise.all([getStor
         <div v-if="error" class="storefront-inline-error" role="alert">{{ error }}</div>
         <div v-if="checkoutStep === 'cart'" class="storefront-cart-layout">
           <section class="storefront-cart-items" aria-label="Cart items"><article v-for="item in cart.items" :key="item.public_id" class="storefront-cart-item" :class="{ 'is-busy': busyItems[item.public_id] }"><RouterLink :to="`/${storeSlug}/products/${item.product_slug}`" class="storefront-cart-item-image"><img v-if="item.image_url" :src="item.image_url" :alt="item.product_name" /><span v-else>No image</span></RouterLink><div class="storefront-cart-item-copy"><div class="storefront-cart-item-title"><RouterLink :to="`/${storeSlug}/products/${item.product_slug}`"><strong>{{ item.product_name }}</strong></RouterLink><button type="button" class="storefront-remove" :disabled="busyItems[item.public_id]" @click="remove(item.public_id)">Remove</button></div><small v-if="item.variant_label">{{ item.variant_label }}</small><small v-if="item.sku" class="storefront-item-sku">SKU: {{ item.sku }}</small><div class="storefront-cart-item-bottom"><div class="storefront-quantity" :class="{ disabled: busyItems[item.public_id] }"><button type="button" aria-label="Decrease quantity" :disabled="item.quantity <= 1 || busyItems[item.public_id]" @click="changeQuantity(item.public_id, item.quantity - 1)">−</button><span aria-live="polite">{{ item.quantity }}</span><button type="button" aria-label="Increase quantity" :disabled="busyItems[item.public_id]" @click="changeQuantity(item.public_id, item.quantity + 1)">+</button></div><div class="storefront-cart-item-price"><span>{{ money(item.unit_price_minor, item.currency) }} each</span><strong>{{ money(item.line_total_minor, item.currency) }}</strong></div></div></div></article></section>
-          <aside class="storefront-checkout-card"><div class="storefront-checkout-title"><strong>Order summary</strong><span>{{ itemCountLabel }}</span></div><div class="storefront-order-total"><span>Subtotal</span><strong>{{ money(cart.subtotal_minor, cart.currency) }}</strong></div><p class="storefront-checkout-note">Shipping or delivery charges, if any, will be confirmed by the store.</p><button class="button button-primary button-lg storefront-add" type="button" @click="goToShipping">Proceed to checkout</button></aside>
+          <aside class="storefront-checkout-card"><div class="storefront-checkout-title"><strong>Order summary</strong><span>{{ itemCountLabel }}</span></div><div class="storefront-order-total"><span>Subtotal</span><strong>{{ money(cart.subtotal_minor, cart.currency) }}</strong></div><p class="storefront-checkout-note">Shipping or delivery charges, if any, will be confirmed by the store.</p><button class="button button-primary button-lg storefront-add" type="button" @click="goToShipping">Proceed to checkout</button>
+            <button class="button button-secondary button-block" type="button" style="margin-top:10px" @click="saveForLater">Save cart for later</button>
+          </aside>
         </div>
         <section v-else-if="checkoutStep === 'shipping'" class="storefront-checkout-panel"><h2>Enter your details</h2><p>Use the phone number that receives M-Pesa prompts and order SMS.</p><div class="storefront-form-grid"><label><span>First name</span><input v-model="form.first_name" autocomplete="given-name" /></label><label><span>Last name</span><input v-model="form.last_name" autocomplete="family-name" /></label><label class="storefront-form-full"><span>Phone (M-Pesa)</span><input v-model="form.phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="07XX XXX XXX" /><p class="storefront-phone-hint" :class="{ ok: phoneValid && form.phone.trim() }">{{ form.phone.trim() ? (phoneValid ? `Looks good · ${formatKenyaPhoneDisplay(form.phone)}` : 'Use a Kenyan mobile number such as 07XX XXX XXX') : 'This number receives the M-Pesa PIN prompt and order updates.' }}</p></label><label><span>Email <em>Optional</em></span><input v-model="form.email" type="email" autocomplete="email" /></label><label class="storefront-form-full"><span>Order note <em>Optional</em></span><textarea v-model="form.notes" rows="3" placeholder="Delivery instructions or anything the store should know"></textarea></label></div><p v-if="fieldError" class="storefront-form-error">{{ fieldError }}</p><div class="storefront-checkout-actions"><button class="button button-secondary" type="button" @click="checkoutStep = 'cart'">Back to cart</button><button class="button button-primary button-lg" type="button" @click="goToPayment">Continue to payment</button></div></section>
         <section v-else-if="checkoutStep === 'payment'" class="storefront-checkout-panel"><h2>Choose payment</h2><p>Select one of the payment methods available for this store.</p><div class="storefront-checkout-summary"><span>Order total</span><strong>{{ money(cart.subtotal_minor, cart.currency) }}</strong></div><div v-if="loadingPaymentMethods" class="storefront-payment-loading">Loading payment options…</div><div v-else-if="paymentMethods.length" class="storefront-payment-options"><label v-for="method in paymentMethods" :key="method.public_id" class="storefront-payment-option" :class="[{ selected: selectedPaymentMethod === method.public_id }, `is-${method.code}`]"><input v-model="selectedPaymentMethod" type="radio" name="payment_method" :value="method.public_id" /><span class="storefront-payment-radio" aria-hidden="true"></span><span class="storefront-payment-copy"><strong>{{ method.name }}</strong><small>{{ paymentDescription(method) }}</small></span><span v-if="method.code === 'mpesa' && method.payment_type === 'stk_push'" class="storefront-payment-tag">Recommended</span><span v-if="method.code === 'card'" class="storefront-payment-brands"><span class="storefront-payment-brand">VISA</span><span class="storefront-payment-brand">MC</span></span></label></div><p v-else class="storefront-form-error">No payment methods are currently available.</p><p v-if="selectedMethod?.instructions" class="storefront-checkout-note">{{ selectedMethod.instructions }}</p><p v-if="fieldError" class="storefront-form-error">{{ fieldError }}</p><div class="storefront-checkout-actions"><button class="button button-secondary" type="button" @click="checkoutStep = 'shipping'">Back to details</button><button class="button button-primary button-lg" type="button" :disabled="loadingPaymentMethods || !paymentMethods.length" @click="goToReview">Review order</button></div><div class="storefront-secure-note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></svg>Secure payment · Never share your M-Pesa PIN with anyone</div></section>
@@ -126,28 +148,23 @@ onMounted(async () => { try { const [storeResponse] = await Promise.all([getStor
                 <strong>{{ money(item.line_total_minor, item.currency) }}</strong>
               </div>
             </div>
-            <div class="storefront-review-row"><span>Total</span><strong>{{ money(cart.subtotal_minor, cart.currency) }}</strong></div>
           </div>
           <div class="storefront-review-block">
             <h3>Contact</h3>
-            <div class="storefront-review-row"><span>Name</span><strong>{{ form.first_name }} {{ form.last_name }}</strong></div>
-            <div class="storefront-review-row"><span>Phone</span><strong>{{ formatKenyaPhoneDisplay(form.phone) }}</strong></div>
-            <div v-if="form.email.trim()" class="storefront-review-row"><span>Email</span><strong>{{ form.email }}</strong></div>
+            <p>{{ form.first_name }} {{ form.last_name }} · {{ formatKenyaPhoneDisplay(form.phone) }}</p>
+            <p v-if="form.email">{{ form.email }}</p>
+            <p v-if="form.notes"><em>{{ form.notes }}</em></p>
           </div>
           <div class="storefront-review-block">
             <h3>Payment</h3>
-            <div class="storefront-review-row"><span>Method</span><strong>{{ selectedMethod?.name || '—' }}</strong></div>
-            <div class="storefront-review-row"><span>Details</span><strong>{{ selectedMethod ? paymentDescription(selectedMethod) : '—' }}</strong></div>
+            <p>{{ selectedMethod?.name || 'Selected method' }}</p>
           </div>
+          <div class="storefront-checkout-summary"><span>Order total</span><strong>{{ money(cart.subtotal_minor, cart.currency) }}</strong></div>
           <p v-if="fieldError" class="storefront-form-error">{{ fieldError }}</p>
-          <div class="storefront-checkout-actions">
-            <button class="button button-secondary" type="button" @click="checkoutStep = 'payment'">Back</button>
-            <button class="button button-primary button-lg" type="button" :disabled="submitting" @click="submitOrder">{{ submitting ? 'Placing order…' : `Place order · ${money(cart.subtotal_minor, cart.currency)}` }}</button>
-          </div>
-          <div class="storefront-secure-note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></svg>Never share your M-Pesa PIN · DukaMe will never ask for it</div>
+          <div class="storefront-checkout-actions"><button class="button button-secondary" type="button" @click="checkoutStep = 'payment'">Back</button><button class="button button-primary button-lg" type="button" :disabled="submitting" @click="submitOrder">{{ submitting ? 'Placing order…' : 'Place order' }}</button></div>
         </section>
-        <div v-if="!cart.items.length" class="storefront-empty storefront-cart-empty"><div class="storefront-empty-icon" aria-hidden="true">—</div><h2>Your cart is empty</h2><p>Add a product to your cart and it will appear here.</p><RouterLink :to="`/${storeSlug}`" class="button button-primary">Browse products</RouterLink></div>
       </template>
+      <div v-else class="storefront-state"><div class="storefront-empty-icon">—</div><h1>Your cart is empty</h1><p>Browse the store and add items to get started.</p><RouterLink :to="`/${storeSlug}`" class="button button-primary">Continue shopping</RouterLink></div>
     </section>
   </main>
 </template>
