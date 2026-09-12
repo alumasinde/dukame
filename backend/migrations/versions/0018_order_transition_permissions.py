@@ -166,7 +166,7 @@ def upgrade() -> None:
             sa.delete(role_permissions).where(
                 role_permissions.c.permission_id == status_manage_id,
                 role_permissions.c.role_id.in_(
-                    sa.select(roles.c.id).where(roles.c.slug.in_("owner", "admin", "manager"))
+                    sa.select(roles.c.id).where(roles.c.slug.in_(["owner", "admin", "manager"]))
                 ),
             )
         )
@@ -229,7 +229,7 @@ def downgrade() -> None:
             sa.insert(role_permissions).from_select(
                 ["role_id", "permission_id"],
                 sa.select(roles.c.id, sa.literal(status_manage)).where(
-                    roles.c.slug.in_("owner", "admin", "manager")
+                    roles.c.slug.in_(["owner", "admin", "manager"])
                 ),
             )
         )
