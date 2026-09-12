@@ -158,6 +158,19 @@ def upgrade() -> None:
                     )
                 )
 
+    status_manage_id = bind.execute(
+        sa.select(permission_table.c.id).where(permission_table.c.key == "orders.status.manage")
+    ).scalar()
+    if status_manage_id is not None:
+        bind.execute(
+            sa.delete(role_permissions).where(
+                role_permissions.c.permission_id == status_manage_id,
+                role_permissions.c.role_id.in_(
+                    sa.select(roles.c.id).where(roles.c.slug.in_("owner", "admin", "manager"))
+                ),
+            )
+        )
+
 
 def downgrade() -> None:
     bind = op.get_bind()
