@@ -35,3 +35,14 @@ def test_notification_worker_has_graceful_shutdown() -> None:
     assert "SIGTERM" in worker
     assert "stop" in worker
     assert "process_notification_queue" in worker
+
+
+def test_maintenance_jobs_are_scheduled_and_safe() -> None:
+    config = read("app/core/config.py")
+    worker = read("app/workers/notification_worker.py")
+    maintenance = read("app/workers/maintenance.py")
+    assert "maintenance_interval_seconds" in config
+    assert "cleanup_expired_carts" in worker
+    assert "cleanup_expired_delivery_otps" in worker
+    assert "Cart.checked_out_at.is_(None)" in maintenance
+    assert "OrderDelivery.otp_verified_at.is_(None)" in maintenance
