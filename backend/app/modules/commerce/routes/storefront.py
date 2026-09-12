@@ -10,6 +10,7 @@ from app.modules.commerce.models.cart import Cart
 from app.modules.commerce.models.order import Order
 from app.modules.commerce.payment_service import PaymentService, payment_response
 from app.modules.commerce.schemas import CartItemAdd, CartItemUpdate, CartResponse, CheckoutRequest, OrderLookupRequest, OrderResponse, OrderStatusHistoryResponse, OrderStatusResponse, OrderTrackingResponse, PaymentResponse
+from app.modules.commerce.order_lookup import lookup_order_by_phone
 from app.modules.commerce.service import CommerceService
 from app.modules.commerce.tracking import tracking_token as make_tracking_token
 from app.modules.commerce.tracking import tracking_url
@@ -139,7 +140,7 @@ async def track_order(store_slug: str, tracking_token_value: str, db: AsyncSessi
 async def lookup_order(store_slug: str, payload: OrderLookupRequest, db: AsyncSession = Depends(get_db)) -> OrderTrackingResponse:
     """Public lookup by order number + phone. Returns tracking payload so the client can open the live tracking page."""
     store = await get_store(db, store_slug)
-    order = await CommerceService(db).lookup_public_order(store, payload.order_number, payload.phone)
+    order = await lookup_order_by_phone(db, store, payload.order_number, payload.phone)
     return tracking_response(order, store)
 
 
