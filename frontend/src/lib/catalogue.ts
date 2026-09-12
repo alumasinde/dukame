@@ -1,6 +1,6 @@
 import { api } from './api'
 
-export interface Store { public_id: string; name: string; slug: string; description: string | null; status: string; currency: string; sms_notifications_enabled?: boolean; whatsapp_notifications_enabled?: boolean }
+export interface Store { public_id: string; name: string; slug: string; description: string | null; contact_phone?: string | null; status: string; currency: string; sms_notifications_enabled?: boolean; whatsapp_notifications_enabled?: boolean }
 export interface Category { public_id: string; name: string; slug: string; description: string | null; parent_public_id: string | null; status: string; sort_order: number }
 export interface Product { public_id: string; name: string; slug: string; description: string | null; category_public_id: string | null; sku: string | null; price_minor: number; compare_at_price_minor: number | null; currency: string; inventory_tracking: boolean; inventory_quantity: number; status: string }
 export interface ProductOptionValue { public_id: string; name: string; slug: string; status: string; sort_order: number }
@@ -11,7 +11,7 @@ export interface ProductMedia { public_id: string; url: string; alt_text: string
 export const catalogueApi = {
   getStore(tenantId: string) { return api.get<Store>(`/tenants/${tenantId}/store`) },
   createStore(tenantId: string, payload: Omit<Store, 'public_id'>) { return api.post<Store>(`/tenants/${tenantId}/store`, payload) },
-  updateStore(tenantId: string, payload: Partial<Pick<Store, 'name' | 'slug' | 'description' | 'status' | 'currency' | 'sms_notifications_enabled' | 'whatsapp_notifications_enabled'>>) {
+  updateStore(tenantId: string, payload: Partial<Pick<Store, 'name' | 'slug' | 'description' | 'contact_phone' | 'status' | 'currency' | 'sms_notifications_enabled' | 'whatsapp_notifications_enabled'>>) {
     return api.put<Store>(`/tenants/${tenantId}/store`, payload)
   },
   listCategories(tenantId: string) { return api.get<Category[]>(`/tenants/${tenantId}/categories`, { params: { limit: 100 } }) },
