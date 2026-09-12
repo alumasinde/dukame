@@ -1,6 +1,5 @@
 """Prevent duplicate inventory movements for the same business reference."""
 
-import sqlalchemy as sa
 from alembic import op
 
 revision = "0022_inventory_movement_idempotency"
