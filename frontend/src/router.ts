@@ -27,7 +27,7 @@ const router = createRouter({
         { path: 'catalogue/categories', name: 'catalogue-categories', component: () => import('./views/CatalogueCategoriesView.vue') },
         { path: 'catalogue/options', name: 'catalogue-options', component: () => import('./views/CatalogueOptionsView.vue') },
         { path: 'orders', name: 'orders', component: () => import('./views/OrdersView.vue') },
-        { path: 'customers', name: 'customers', component: phase3View, props: { title: 'Customers', description: 'Customer profiles, purchase history and customer activity will be managed here.' } },
+        { path: 'customers', name: 'customers', component: () => import('./views/CustomersView.vue') },
         { path: 'payments', name: 'payments', component: () => import('./views/PaymentsView.vue') },
         { path: 'analytics', name: 'analytics', component: phase3View, props: { title: 'Analytics', description: 'Sales, product, customer and business performance analytics will be added as commerce data becomes available.' } },
       ],

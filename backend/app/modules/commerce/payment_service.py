@@ -153,6 +153,27 @@ class PaymentService:
             raise HTTPException(status_code=409, detail="Only failed payments can be retried")
         return await self.initiate(payment.public_id)
 
+    async def retry_storefront_payment(self, order: Order) -> Payment:
+        """
+        Customer-facing STK retry from the public order tracking page.
+
+        The caller (a public tracking-token endpoint) has already proven the
+        customer owns this order, so this skips resolve_store/require_permission
+        and only checks the payment itself.
+        """
+        payment = await self.db.scalar(
+            select(Payment)
+            .options(selectinload(Payment.payment_method), selectinload(Payment.attempts), selectinload(Payment.events))
+            .where(Payment.order_id == order.id)
+        )
+        if payment is None:
+            raise HTTPException(status_code=404, detail="Payment not found")
+        if payment.payment_method.code != "mpesa":
+            raise HTTPException(status_code=422, detail="Only M-Pesa payments can be retried")
+        if payment.status != "failed":
+            raise HTTPException(status_code=409, detail="Only failed payments can be retried")
+        return await self.initiate(payment.public_id)
+
     async def create_method(self, user: User, tenant_public_id: str, code: str, name: str, instructions: str | None, enabled: bool, config: dict[str, str] | None) -> tuple[PaymentMethod, str | None, str | None]:
         store = await resolve_store(self.db, user, tenant_public_id, "payments.manage")
         normalized_code = code.strip().lower()
@@ -354,6 +375,15 @@ class PaymentService:
             return
         order.status_id = confirmed.id
         self.db.add(OrderStatusHistory(order_id=order.id, status_id=confirmed.id, source="payment"))
+
+        # Convert stock reservations into real inventory deductions now that
+        # payment is confirmed. Imported locally to avoid a circular import
+        # with app.modules.commerce.services.order_service, which imports
+        # this module.
+        from app.modules.commerce.services.order_service import OrderService
+
+        await OrderService(self.db).finalize_order_payment(order.id)
+
         store = await self.db.scalar(select(Store).where(Store.id == payment.store_id))
         if store:
             await queue_order_sms(self.db, order, confirmed, store.name, store.slug)

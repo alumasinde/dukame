@@ -1,6 +1,7 @@
 /* DukaMe styling entry point. */
 @import '../styles.css';
 @import './foundation/variables.css';
+@import './foundation/typography.css';
 @import './foundation/reset.css';
 @import './layout/shell.css';
 @import './layout/sidebar.css';
@@ -15,6 +16,7 @@
 @import './modules/products.css';
 @import './modules/account.css';
 @import './modules/storefront.css';
+@import './modules/storefront-enhanced.css';
 @import './modules/storefront-availability.css';
 @import './modules/storefront-quantity.css';
 @import './modules/storefront-payment.css';

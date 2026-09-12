@@ -222,7 +222,7 @@ class CommerceService:
         customer = await self._resolve_checkout_customer(store, payload)
         public_id = secrets.token_hex(16)
         raw_tracking_token = tracking_token(public_id)
-        order = Order(public_id=public_id, store_id=store.id, customer_id=customer.id if customer else None, status_id=initial_status.id, order_number=await self._order_number(), tracking_token_hash=tracking_token_hash(raw_tracking_token), customer_first_name=customer.first_name if customer else payload.first_name.strip(), customer_last_name=customer.last_name if customer else payload.last_name.strip(), customer_email=customer.email if customer else (payload.email.strip().lower() if payload.email else None), customer_phone=customer.phone if customer else normalize_phone(payload.phone) or payload.phone, notes=payload.notes.strip() if payload.notes else None, currency=store.currency, subtotal_minor=subtotal, total_minor=subtotal)
+        order = Order(public_id=public_id, store_id=store.id, customer_id=customer.id if customer else None, status_id=initial_status.id, order_number=await self._order_number(), tracking_token_hash=tracking_token_hash(raw_tracking_token), customer_first_name=customer.first_name if customer else payload.first_name.strip(), customer_last_name=customer.last_name if customer else payload.last_name.strip(), customer_email=customer.email if customer else (payload.email.strip().lower() if payload.email else None), customer_phone=customer.phone if customer else normalize_phone(payload.phone) or payload.phone, delivery_address=payload.delivery_address.strip(), delivery_landmark=payload.delivery_landmark.strip() if payload.delivery_landmark else None, delivery_notes=payload.delivery_notes.strip() if payload.delivery_notes else None, delivery_option=payload.delivery_option or "standard", notes=payload.notes.strip() if payload.notes else None, currency=store.currency, subtotal_minor=subtotal, total_minor=subtotal)
         self.db.add(order)
         await self.db.flush()
         self.db.add(OrderStatusHistory(order_id=order.id, status_id=initial_status.id, source="customer"))
@@ -407,13 +407,13 @@ class CommerceService:
                 owner = await self._lock_product(item.product_id)
             if owner is None or not owner.inventory_tracking:
                 continue
-            existing_return = await self.db.scalar(select(InventoryMovement).where(InventoryMovement.store_id == store_id, InventoryMovement.reference_type == "order_item", InventoryMovement.reference_id == item.id))
+            existing_return = await self.db.scalar(select(InventoryMovement).where(InventoryMovement.store_id == store_id, InventoryMovement.reference_type == "order_item", InventoryMovement.reference_id == item.id, InventoryMovement.movement_type == "return"))
             if existing_return is not None:
                 continue
             quantity_before = owner.inventory_quantity
             quantity_after = quantity_before + item.quantity
             owner.inventory_quantity = quantity_after
-            self.db.add(InventoryMovement(public_id=secrets.token_hex(16), store_id=store_id, product_id=item.product_id, variant_id=item.variant_id, movement_type="return", quantity=item.quantity, quantity_before=quantity_before, quantity_after=quantity_after, reference_type="order_item", reference_id=item.id))
+            self.db.add(InventoryMovement(public_id=secrets.token_hex(16), store_id=store_id, product_id=item.product_id, variant_id=item.variant_id, movement_type="return", quantity=item.quantity, quantity_before=quantity_before, quantity_after=quantity_after, reference_type="order_item", reference_id=item.id, reason="Order cancellation"))
 
     async def list_statuses(self, user: User, tenant_public_id: str) -> list[OrderStatus]:
         await resolve_store(self.db, user, tenant_public_id, "orders.read")

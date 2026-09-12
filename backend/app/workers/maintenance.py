@@ -10,6 +10,7 @@ from app.modules.subscriptions.services.billing import (
     mark_past_due_unpaid,
 )
 from app.modules.subscriptions.services.subscription import expire_due_subscriptions
+from app.workers.release_expired_reservations import release_expired_reservations
 
 
 async def cleanup_expired_carts(db: AsyncSession) -> int:
@@ -63,6 +64,7 @@ async def run_maintenance(db: AsyncSession) -> dict[str, int]:
     results: dict[str, int] = {}
     results["expired_carts"] = await cleanup_expired_carts(db)
     results["expired_delivery_otps"] = await cleanup_expired_delivery_otps(db)
+    results["expired_stock_reservations"] = await release_expired_reservations(db)
     results["renewal_invoices"] = await renew_subscriptions(db)
     results["past_due_subscriptions"] = await past_due_subscriptions(db)
     results["expired_subscriptions"] = await expire_subscriptions(db)

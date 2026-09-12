@@ -1,0 +1,105 @@
+/* Improved typography for better readability */
+html {
+  font-size: var(--font-size-base);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  line-height: 1.6;
+  color: var(--body);
+}
+
+/* Improved heading sizes */
+h1, h2, h3, h4, h5, h6 {
+  color: var(--ink);
+  line-height: 1.2;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+h1 { font-size: clamp(1.75rem, 4vw, 2.5rem); }
+h2 { font-size: clamp(1.5rem, 3vw, 2rem); }
+h3 { font-size: clamp(1.25rem, 2.5vw, 1.75rem); }
+h4 { font-size: clamp(1.1rem, 2vw, 1.5rem); }
+h5 { font-size: 1.1rem; }
+h6 { font-size: 1rem; }
+
+/* Improved paragraph and text sizing */
+p {
+  font-size: 1rem;
+  line-height: 1.7;
+  margin-bottom: 1rem;
+}
+
+small {
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+/* Form input improvements */
+input, textarea, select {
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+/* Button text improvements */
+.button {
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.button-lg {
+  font-size: 1.1rem;
+  padding: 0.875rem 1.75rem;
+}
+
+.button-sm {
+  font-size: 0.875rem;
+  padding: 0.5rem 1rem;
+}
+
+/* Link improvements */
+a {
+  font-size: inherit;
+  color: var(--primary);
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+a:hover {
+  color: var(--primary-hover);
+}
+
+/* Code and pre improvements */
+code, pre {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.9em;
+}
+
+/* Label improvements */
+label {
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--ink);
+  margin-bottom: 0.375rem;
+  display: block;
+}
+
+/* Helper text improvements */
+.muted, .text-muted {
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+/* Eyebrow text improvements */
+.eyebrow, .page-eyebrow {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--primary);
+}

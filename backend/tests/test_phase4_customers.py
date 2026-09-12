@@ -54,7 +54,45 @@ def test_checkout_associates_customer_by_store_scoped_phone() -> None:
     assert 'begin_nested()' in service
 
 
+def test_checkout_includes_delivery_fields() -> None:
+    """Test that checkout process includes delivery information from payload."""
+    service = read("app/modules/commerce/service.py")
+    order_service = read("app/modules/commerce/services/order_service.py")
+    
+    # Check old CommerceService
+    assert 'delivery_address=payload.delivery_address.strip()' in service
+    assert 'delivery_landmark=payload.delivery_landmark.strip()' in service
+    assert 'delivery_notes=payload.delivery_notes.strip()' in service
+    assert 'delivery_option=payload.delivery_option or "standard"' in service
+    
+    # Check new OrderService
+    assert 'delivery_address=payload.delivery_address.strip()' in order_service
+    assert 'delivery_landmark=payload.delivery_landmark.strip()' in order_service
+    assert 'delivery_notes=payload.delivery_notes.strip()' in order_service
+    assert 'delivery_option=payload.delivery_option or "standard"' in order_service
+
+
 def test_order_model_exposes_customer_relationship() -> None:
     order = read("app/modules/commerce/models/order.py")
     assert 'customer_id: Mapped[int | None]' in order
     assert 'customer: Mapped["Customer | None"]' in order
+
+
+def test_order_model_includes_delivery_fields() -> None:
+    """Test that Order model has delivery fields."""
+    order = read("app/modules/commerce/models/order.py")
+    assert 'delivery_address: Mapped[str]' in order
+    assert 'delivery_landmark: Mapped[str | None]' in order
+    assert 'delivery_notes: Mapped[str | None]' in order
+    assert 'delivery_option: Mapped[str]' in order
+
+
+def test_checkout_schema_includes_delivery_validation() -> None:
+    """Test that CheckoutRequest schema includes delivery fields with validation."""
+    schema = read("app/modules/commerce/schemas.py")
+    assert 'delivery_address: str = Field(min_length=5, max_length=500)' in schema
+    assert 'delivery_landmark: str | None = Field(default=None, max_length=500)' in schema
+    assert 'delivery_notes: str | None = Field(default=None, max_length=1000)' in schema
+    assert 'delivery_option: str = Field(default="standard")' in schema
+    assert '@field_validator("delivery_option")' in schema
+    assert 'valid_options = {"standard", "express", "pickup"}' in schema

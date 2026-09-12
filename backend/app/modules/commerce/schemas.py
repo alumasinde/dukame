@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class CartItemAdd(BaseModel):
@@ -25,6 +25,14 @@ class CheckoutRequest(BaseModel):
     
     notes: str | None = Field(default=None, max_length=1000)
     payment_method_public_id: str | None = Field(default=None, min_length=1, max_length=32)
+
+    @field_validator("delivery_option")
+    @classmethod
+    def validate_delivery_option(cls, v: str) -> str:
+        valid_options = {"standard", "express", "pickup"}
+        if v.lower() not in valid_options:
+            raise ValueError(f"delivery_option must be one of: {', '.join(valid_options)}")
+        return v.lower()
 
 
 class PaymentMethodResponse(BaseModel):
@@ -161,6 +169,10 @@ class OrderTrackingResponse(BaseModel):
     updated_at: str
     tracking_url: str
     payment: PaymentResponse | None = None
+    delivery_address: str | None = None
+    delivery_landmark: str | None = None
+    delivery_notes: str | None = None
+    delivery_option: str | None = None
 
 
 class OrderLookupRequest(BaseModel):

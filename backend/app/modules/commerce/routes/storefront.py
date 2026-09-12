@@ -11,7 +11,8 @@ from app.modules.commerce.models.order import Order
 from app.modules.commerce.payment_service import PaymentService, payment_response
 from app.modules.commerce.schemas import CartItemAdd, CartItemUpdate, CartResponse, CheckoutRequest, OrderLookupRequest, OrderResponse, OrderStatusHistoryResponse, OrderStatusResponse, OrderTrackingResponse, PaymentResponse
 from app.modules.commerce.order_lookup import lookup_order_by_phone
-from app.modules.commerce.service import CommerceService
+from app.modules.commerce.services.cart_service import CartService
+from app.modules.commerce.services.order_service import OrderService
 from app.modules.commerce.tracking import tracking_token as make_tracking_token
 from app.modules.commerce.tracking import tracking_url
 
@@ -50,6 +51,10 @@ def order_response(order: Order, include_tracking: bool = False, store_slug: str
         customer_last_name=order.customer_last_name,
         customer_email=order.customer_email,
         customer_phone=order.customer_phone,
+        delivery_address=order.delivery_address,
+        delivery_landmark=order.delivery_landmark,
+        delivery_notes=order.delivery_notes,
+        delivery_option=order.delivery_option,
         notes=order.notes,
         currency=order.currency,
         subtotal_minor=order.subtotal_minor,
@@ -76,6 +81,10 @@ def tracking_response(order: Order, store: Store) -> OrderTrackingResponse:
         updated_at=order.updated_at.isoformat(),
         tracking_url=tracking_url(store.slug, make_tracking_token(order.public_id)),
         payment=payment_response(order.payment) if order.payment else None,
+        delivery_address=order.delivery_address,
+        delivery_landmark=order.delivery_landmark,
+        delivery_notes=order.delivery_notes,
+        delivery_option=order.delivery_option,
     )
 
 
@@ -91,7 +100,7 @@ async def get_cart(
     db: AsyncSession = Depends(get_db),
 ) -> CartResponse:
     store = await get_store(db, store_slug)
-    service = CommerceService(db)
+    service = CartService(db)
     cart, token, created = await service.get_or_create_cart(store, dukame_cart)
     if created:
         await db.commit()
@@ -114,7 +123,7 @@ async def add_cart_item(
     db: AsyncSession = Depends(get_db),
 ) -> CartResponse:
     store = await get_store(db, store_slug)
-    cart = await CommerceService(db).add_item(store, dukame_cart, payload)
+    cart = await CartService(db).add_item(store, dukame_cart, payload)
     if dukame_cart:
         set_cart_cookie(response, store, dukame_cart)
     return cart_response(cart)
@@ -130,7 +139,7 @@ async def update_cart_item(
     db: AsyncSession = Depends(get_db),
 ) -> CartResponse:
     store = await get_store(db, store_slug)
-    cart = await CommerceService(db).update_item(store, dukame_cart, item_public_id, payload)
+    cart = await CartService(db).update_item(store, dukame_cart, item_public_id, payload)
     if dukame_cart:
         set_cart_cookie(response, store, dukame_cart)
     return cart_response(cart)
@@ -145,7 +154,7 @@ async def delete_cart_item(
     db: AsyncSession = Depends(get_db),
 ) -> CartResponse:
     store = await get_store(db, store_slug)
-    cart = await CommerceService(db).remove_item(store, dukame_cart, item_public_id)
+    cart = await CartService(db).remove_item(store, dukame_cart, item_public_id)
     if dukame_cart:
         set_cart_cookie(response, store, dukame_cart)
     return cart_response(cart)
@@ -154,7 +163,7 @@ async def delete_cart_item(
 @router.post("/{store_slug}/cart/checkout", response_model=OrderResponse)
 async def checkout(store_slug: str, payload: CheckoutRequest, response: Response, dukame_cart: str | None = Cookie(default=None), idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"), db: AsyncSession = Depends(get_db)) -> OrderResponse:
     store = await get_store(db, store_slug)
-    order = await CommerceService(db).checkout(store, dukame_cart, payload, idempotency_key=idempotency_key)
+    order = await OrderService(db).checkout(store, dukame_cart, payload, idempotency_key=idempotency_key)
     response.delete_cookie("dukame_cart", path=f"/api/v1/storefront/{store.slug}")
     return order_response(order, include_tracking=True, store_slug=store.slug, store_name=store.name)
 
@@ -162,7 +171,7 @@ async def checkout(store_slug: str, payload: CheckoutRequest, response: Response
 @router.get("/{store_slug}/order/track/{tracking_token_value}", response_model=OrderTrackingResponse)
 async def track_order(store_slug: str, tracking_token_value: str, db: AsyncSession = Depends(get_db)) -> OrderTrackingResponse:
     store = await get_store(db, store_slug)
-    order = await CommerceService(db).get_public_order(store, tracking_token_value)
+    order = await OrderService(db).get_public_order(store, tracking_token_value)
     return tracking_response(order, store)
 
 
@@ -185,6 +194,6 @@ async def retry_tracked_payment(
 ) -> PaymentResponse:
     """Customer STK retry authorized by the order tracking token (no login)."""
     store = await get_store(db, store_slug)
-    order = await CommerceService(db).get_public_order(store, tracking_token_value)
+    order = await OrderService(db).get_public_order(store, tracking_token_value)
     payment = await PaymentService(db).retry_storefront_payment(order)
     return payment_response(payment)

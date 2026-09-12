@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useAuthStore } from '../stores/auth'
-import { getNextOrderStatuses, getOrder, getOrderStatuses, getOrders, markCashPaymentPaid, updateOrderStatus, type Order, type OrderStatus } from '../lib/cart'
+import { assignDelivery, confirmDelivery, getNextOrderStatuses, getOrder, getOrderStatuses, getOrders, issueDeliveryOtp, markCashPaymentPaid, updateOrderStatus, type Delivery, type DeliveryAssign, type DeliveryConfirm, type Order, type OrderStatus } from '../lib/cart'
 
 const auth = useAuthStore()
 const orders = ref<Order[]>([])
@@ -15,6 +15,16 @@ const markingPayment = ref(false)
 const error = ref('')
 const actionLoading = ref(false)
 const tenantId = computed(() => auth.activeTenant?.public_id || '')
+
+// Delivery management
+const delivery = ref<Delivery | null>(null)
+const loadingDelivery = ref(false)
+const assigningDelivery = ref(false)
+const issuingOtp = ref(false)
+const confirmingDelivery = ref(false)
+const otpInput = ref('')
+const deliveryNote = ref('')
+const showDeliveryPanel = ref(false)
 
 function money(minor: number, currency: string) { return new Intl.NumberFormat('en-KE', { style: 'currency', currency, maximumFractionDigits: 2 }).format(minor / 100) }
 function date(value: string) { return new Intl.DateTimeFormat('en-KE', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) }
@@ -42,6 +52,7 @@ async function openOrder(order: Order) {
   try {
     selectedOrder.value = (await getOrder(tenantId.value, order.public_id)).data
     await loadNextStatuses(selectedOrder.value)
+    await loadDelivery()
   } catch (err: any) { error.value = apiError(err, 'We could not load that order.') }
 }
 
@@ -68,6 +79,51 @@ async function markPaymentPaid() {
   finally { markingPayment.value = false }
 }
 
+async function loadDelivery() {
+  if (!tenantId.value || !selectedOrder.value) return
+  loadingDelivery.value = true; error.value = ''
+  try {
+    delivery.value = (await getDelivery(tenantId.value, selectedOrder.value.public_id)).data
+  } catch (err: any) { error.value = apiError(err, 'We could not load delivery information.') }
+  finally { loadingDelivery.value = false }
+}
+
+async function assignDeliveryToSelf() {
+  if (!tenantId.value || !selectedOrder.value || assigningDelivery.value) return
+  assigningDelivery.value = true; error.value = ''
+  try {
+    // In a real implementation, you'd get the current user's ID from auth store
+    // For now, this is a placeholder
+    const payload: DeliveryAssign = { assigned_user_id: 1 } // This should be auth.user.id
+    delivery.value = (await assignDelivery(tenantId.value, selectedOrder.value.public_id, payload)).data
+    showDeliveryPanel.value = true
+  } catch (err: any) { error.value = apiError(err, 'We could not assign delivery.') }
+  finally { assigningDelivery.value = false }
+}
+
+async function issueOtp() {
+  if (!tenantId.value || !selectedOrder.value || issuingOtp.value) return
+  issuingOtp.value = true; error.value = ''
+  try {
+    const result = (await issueDeliveryOtp(tenantId.value, selectedOrder.value.public_id)).data
+    alert(`Delivery OTP: ${result.otp} (expires at ${new Date(result.expires_at).toLocaleString()})`)
+    await loadDelivery()
+  } catch (err: any) { error.value = apiError(err, 'We could not issue delivery OTP.') }
+  finally { issuingOtp.value = false }
+}
+
+async function confirmDeliveryWithOtp() {
+  if (!tenantId.value || !selectedOrder.value || confirmingDelivery.value || !otpInput.value.trim()) return
+  confirmingDelivery.value = true; error.value = ''
+  try {
+    const payload: DeliveryConfirm = { otp: otpInput.value.trim(), note: deliveryNote.value.trim() || undefined }
+    delivery.value = (await confirmDelivery(tenantId.value, selectedOrder.value.public_id, payload)).data
+    otpInput.value = ''; deliveryNote.value = ''
+    await loadDelivery()
+  } catch (err: any) { error.value = apiError(err, 'We could not confirm delivery.') }
+  finally { confirmingDelivery.value = false }
+}
+
 onMounted(load)
 </script>
 
@@ -92,6 +148,35 @@ onMounted(load)
       <aside v-if="selectedOrder" class="order-detail-card">
         <div class="order-detail-head"><div><span class="page-eyebrow">Order</span><h2>#{{ selectedOrder.order_number }}</h2><p>{{ date(selectedOrder.created_at) }}</p></div><button type="button" class="commerce-close" aria-label="Close order" @click="selectedOrder = null">×</button></div>
         <div class="order-customer"><strong>{{ selectedOrder.customer_first_name }} {{ selectedOrder.customer_last_name }}</strong><span>{{ selectedOrder.customer_phone }}</span><span v-if="selectedOrder.customer_email">{{ selectedOrder.customer_email }}</span></div>
+        <div class="order-delivery"><div><span>Delivery option</span><strong>{{ selectedOrder.delivery_option === 'pickup' ? 'Pickup from store' : selectedOrder.delivery_option === 'express' ? 'Express delivery' : 'Standard delivery' }}</strong></div><div><span>Address</span><strong>{{ selectedOrder.delivery_address }}</strong></div><div v-if="selectedOrder.delivery_landmark"><span>Landmark</span><strong>{{ selectedOrder.delivery_landmark }}</strong></div><div v-if="selectedOrder.delivery_notes"><span>Delivery notes</span><strong>{{ selectedOrder.delivery_notes }}</strong></div></div>
+        
+        <div class="order-delivery-management">
+          <div class="delivery-header"><span>Delivery</span><button v-if="!showDeliveryPanel" class="button button-secondary button-sm" type="button" @click="showDeliveryPanel = true">Manage</button></div>
+          <div v-if="showDeliveryPanel" class="delivery-panel">
+            <div v-if="loadingDelivery" class="commerce-state"><div class="status-spinner" /><p>Loading delivery info…</p></div>
+            <div v-else-if="delivery">
+              <div class="delivery-status"><span>Status</span><strong>{{ delivery.status }}</strong></div>
+              <div v-if="delivery.assigned_user_id"><span>Assigned to</span><strong>User ID: {{ delivery.assigned_user_id }}</strong></div>
+              <div v-if="delivery.delivered_at"><span>Delivered at</span><strong>{{ date(delivery.delivered_at) }}</strong></div>
+              <div v-if="delivery.otp_expires_at"><span>OTP expires</span><strong>{{ date(delivery.otp_expires_at) }}</strong></div>
+              <div v-if="delivery.otp_attempts"><span>OTP attempts</span><strong>{{ delivery.otp_attempts }}</strong></div>
+              
+              <div class="delivery-actions">
+                <button v-if="!delivery.assigned_user_id" class="button button-primary button-sm" type="button" :disabled="assigningDelivery" @click="assignDeliveryToSelf">{{ assigningDelivery ? 'Assigning…' : 'Assign to me' }}</button>
+                <button v-if="delivery.assigned_user_id && !delivery.delivered_at" class="button button-secondary button-sm" type="button" :disabled="issuingOtp" @click="issueOtp">{{ issuingOtp ? 'Issuing…' : 'Issue OTP' }}</button>
+                <button v-if="delivery.assigned_user_id && !delivery.delivered_at" class="button button-secondary button-sm" type="button" @click="showDeliveryPanel = false">Close</button>
+              </div>
+              
+              <div v-if="delivery.assigned_user_id && !delivery.delivered_at" class="otp-confirm">
+                <h4>Confirm delivery</h4>
+                <div class="form-group"><label>Enter OTP</label><input v-model="otpInput" type="text" placeholder="6-digit code" maxlength="6" /></div>
+                <div class="form-group"><label>Delivery note <em>Optional</em></label><textarea v-model="deliveryNote" rows="2" placeholder="Any notes about the delivery" /></div>
+                <button class="button button-primary button-sm" type="button" :disabled="confirmingDelivery || !otpInput.value.trim()" @click="confirmDeliveryWithOtp">{{ confirmingDelivery ? 'Confirming…' : 'Confirm delivery' }}</button>
+              </div>
+            </div>
+            <div v-else class="delivery-empty"><p>No delivery information available. Click "Assign to me" to start delivery process.</p></div>
+          </div>
+        </div>
         <div v-if="selectedOrder.payment" class="order-payment-panel"><div><span>Payment</span><strong>{{ selectedOrder.payment.method.name }}</strong></div><div><span>Status</span><strong>{{ selectedOrder.payment.status }}</strong></div><button v-if="selectedOrder.payment.method.code === 'cash' && selectedOrder.payment.status === 'pending'" type="button" class="button button-secondary button-block" :disabled="markingPayment" @click="markPaymentPaid">{{ markingPayment ? 'Saving…' : 'Mark cash as paid' }}</button></div>
         <div class="order-items"><div v-for="item in selectedOrder.items" :key="item.public_id" class="order-item-row"><div><strong>{{ item.product_name }}</strong><small v-if="item.variant_label">{{ item.variant_label }}</small><small>{{ item.quantity }} × {{ money(item.unit_price_minor, selectedOrder.currency) }}</small></div><strong>{{ money(item.line_total_minor, selectedOrder.currency) }}</strong></div></div>
         <div v-if="selectedOrder.notes" class="order-note"><span>Customer note</span><p>{{ selectedOrder.notes }}</p></div>
@@ -103,3 +188,25 @@ onMounted(load)
     </div>
   </section>
 </template>
+
+<style scoped>
+.order-delivery { margin-bottom: 1.5rem; padding: 1rem; background: #f9fafb; border-radius: 0.5rem; }
+.order-delivery > div { display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid #e5e7eb; }
+.order-delivery > div:last-child { border-bottom: none; }
+.order-delivery span { font-size: 0.875rem; color: #6b7280; }
+.order-delivery-management { margin-bottom: 1.5rem; }
+.delivery-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid #e5e7eb; }
+.delivery-panel { padding: 1rem; background: #f9fafb; border-radius: 0.5rem; }
+.delivery-status, .delivery-panel > div { display: flex; justify-content: space-between; padding: 0.5rem 0; }
+.delivery-panel > div { border-bottom: 1px solid #e5e7eb; }
+.delivery-panel > div:last-child { border-bottom: none; }
+.delivery-panel span { font-size: 0.875rem; color: #6b7280; }
+.delivery-actions { display: flex; gap: 0.5rem; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #e5e7eb; }
+.otp-confirm { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #e5e7eb; }
+.otp-confirm h4 { margin-bottom: 0.75rem; font-size: 0.875rem; }
+.otp-confirm .form-group { margin-bottom: 0.75rem; }
+.otp-confirm .form-group label { display: block; margin-bottom: 0.25rem; font-size: 0.875rem; color: #6b7280; }
+.otp-confirm .form-group input, .otp-confirm .form-group textarea { width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 0.25rem; }
+.delivery-empty { text-align: center; padding: 1rem; color: #6b7280; }
+.button-sm { padding: 0.375rem 0.75rem; font-size: 0.875rem; }
+</style>

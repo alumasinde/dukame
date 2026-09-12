@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import secrets
 from datetime import UTC, datetime, timedelta
 
@@ -16,8 +17,13 @@ from app.modules.catalogue.services.context import resolve_store
 from app.modules.commerce.audit_service import record_audit
 from app.modules.commerce.models.order import Order
 from app.modules.commerce.models.order_delivery import OrderDelivery
+from app.modules.commerce.models.order_notification import OrderNotification
+from app.modules.commerce.notification_channels import normalize_phone, phone_digits, send_sms
+from app.modules.commerce.notifications import platform_sms_configured
 from app.modules.rbac.services.rbac import require_permission
 from app.modules.tenancy.models.tenant import TenantUser
+
+logger = logging.getLogger(__name__)
 
 
 class DeliveryService:
@@ -104,9 +110,13 @@ class DeliveryService:
             after={"status": delivery.status, "otp_expires_at": delivery.otp_expires_at.isoformat()},
         )
         await self.db.commit()
-        
-        # NOTE: OTP should be sent to customer's verified phone via SMS
-        # NOT exposed in rider app, logs, or API responses
+
+        # Send the OTP to the customer's verified phone via SMS. This is sent
+        # synchronously (not via the status-notification queue, which is keyed
+        # one-per-order-status and would reject a re-issued OTP for the same
+        # delivery) and never exposed in the rider app, logs, or API responses.
+        await self._send_otp_sms(store, order_public_id, otp)
+
         return delivery, otp
 
     async def confirm(self, user: User, tenant_public_id: str, order_public_id: str, otp: str, note: str | None) -> OrderDelivery:
@@ -175,6 +185,33 @@ class DeliveryService:
         )
         await self.db.commit()
         return delivery
+
+    async def _send_otp_sms(self, store: Store, order_public_id: str, otp: str) -> None:
+        """Best-effort SMS delivery of the delivery OTP. Never raises — a failed
+        SMS should not block dispatch; the rider/support can always relay the
+        code by phone from the delivery record if needed."""
+        if not platform_sms_configured() or not store.sms_notifications_enabled:
+            return
+        order = await self._order(store.id, order_public_id, lock=False)
+        if order is None or not order.customer_phone:
+            return
+        recipient = normalize_phone(order.customer_phone)
+        if not recipient or len(phone_digits(recipient)) < 10:
+            return
+        notification = OrderNotification(
+            order_id=order.id,
+            channel="sms",
+            recipient=recipient,
+            message=f"{store.name}: Your delivery code for order #{order.order_number} is {otp}. Share it only with the rider on handover.",
+            tracking_url="",
+        )
+        try:
+            await send_sms(notification)
+        except Exception as exc:
+            logger.warning(
+                "delivery_otp_sms_failed",
+                extra={"order_public_id": order_public_id, "store_id": store.id, "error": str(exc)},
+            )
 
     async def _create_locked(self, store: Store, order_public_id: str) -> OrderDelivery:
         order = await self._order(store.id, order_public_id, lock=True)

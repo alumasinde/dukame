@@ -6,6 +6,10 @@ Creates the structure for holding inventory during pending payment.
 from alembic import op
 import sqlalchemy as sa
 
+revision = "0034_stock_reservations"
+down_revision = "0033_store_contact_phone"
+branch_labels = None
+depends_on = None
 
 def upgrade():
     op.create_table(
@@ -25,10 +29,10 @@ def upgrade():
         sa.Column("release_reason", sa.String(100), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now(), onupdate=sa.func.now()),
-        sa.ForeignKey("stores.id", name="fk_stock_reservations_store_id", ondelete="CASCADE"),
-        sa.ForeignKey("orders.id", name="fk_stock_reservations_order_id", ondelete="CASCADE"),
-        sa.ForeignKey("products.id", name="fk_stock_reservations_product_id", ondelete="CASCADE"),
-        sa.ForeignKey("product_variants.id", name="fk_stock_reservations_variant_id", ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["store_id"], ["stores.id"], name="fk_stock_reservations_store_id", ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["order_id"], ["orders.id"], name="fk_stock_reservations_order_id", ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["product_id"], ["products.id"], name="fk_stock_reservations_product_id", ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["variant_id"], ["product_variants.id"], name="fk_stock_reservations_variant_id", ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
     
