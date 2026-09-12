@@ -44,6 +44,14 @@ class Settings(BaseSettings):
     sms_username: str | None = None
     sms_sender_id: str | None = None
     sms_api_url: str = "https://api.africastalking.com/version1/messaging"
+    whatsapp_provider: str = "none"
+    whatsapp_api_token: SecretStr | None = None
+    whatsapp_phone_number_id: str | None = None
+    whatsapp_api_base_url: str = "https://graph.facebook.com/v21.0"
+    whatsapp_api_url: str = ""
+    whatsapp_status_template: str = "order_status_update"
+    whatsapp_template_language: str = "en"
+    whatsapp_require_opt_in: bool = True
     notification_poll_seconds: float = Field(default=2.0, ge=1.0, le=60.0)
     notification_max_attempts: int = Field(default=5, ge=1, le=20)
     notification_lease_seconds: int = Field(default=60, ge=30, le=600)
