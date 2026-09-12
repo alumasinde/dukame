@@ -6,7 +6,6 @@ from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.database import get_db
 from app.modules.auth.models.identity import User
 from app.modules.catalogue.services.context import resolve_store
 from app.modules.commerce.audit_service import record_audit
