@@ -1,8 +1,11 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
-import { RouterLink } from 'vue-router'
+import { nextTick, onMounted } from 'vue'
+import { RouterLink, useRoute } from 'vue-router'
 import { useStorefrontShop } from '../lib/useStorefrontShop'
+import StorefrontBottomNav from '../components/StorefrontBottomNav.vue'
 import { APP_NAME } from '../lib/branding'
+
+const route = useRoute()
 
 const {
   store, loading, error, selectedCategory, searchQuery, searchInput, sortBy, page,
@@ -15,7 +18,13 @@ const {
   changeProductQuantity, changeDrawerQuantity, load, isNewProduct, clearRecentSearches,
 } = useStorefrontShop()
 
-onMounted(() => { void load() })
+onMounted(async () => {
+  await load()
+  if (route.hash === '#categories') {
+    await nextTick()
+    document.getElementById('categories')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+})
 
 function hideRecentSearches() {
   setTimeout(() => {
@@ -93,7 +102,7 @@ function hideRecentSearches() {
           <label class="storefront-sort">Sort<select v-model="sortBy"><option value="featured">Featured</option><option value="newest">Newest</option><option value="price_asc">Price · Low to high</option><option value="price_desc">Price · High to low</option></select></label>
         </div>
         <div v-if="addError" class="storefront-inline-error storefront-add-error" role="alert">{{ addError }} <button type="button" @click="addError = ''">Dismiss</button></div>
-        <div v-if="store.categories.length" class="storefront-category-panel">
+        <div v-if="store.categories.length" id="categories" class="storefront-category-panel">
           <div class="storefront-category-heading"><strong>Browse categories</strong><span v-if="selectedCategoryItem">{{ selectedCategoryItem.name }}</span></div>
           <div class="storefront-categories" aria-label="Product categories">
             <button type="button" :class="{ active: !selectedCategory }" @click="selectCategory('')">All <span>{{ store.products.length }}</span></button>
@@ -154,9 +163,13 @@ function hideRecentSearches() {
             <span>Page {{ page }} of {{ totalPages }}</span>
             <button type="button" :disabled="page >= totalPages" @click="page = Math.min(totalPages, page + 1)">Next</button>
           </div>
-        </div>                        
+        </div>
       </section>
-      <footer class="storefront-footer">{{ store.name }} · Powered by {{ APP_NAME}}.</footer>
+      <footer class="storefront-footer">
+        <span>{{ store.name }} · Powered by {{ APP_NAME }}</span>
+        <RouterLink :to="`/${store.slug}/track`" class="storefront-footer-link">Track an order</RouterLink>
+      </footer>
+      <StorefrontBottomNav :store-slug="store.slug" :cart-count="cartState.itemCount.value" :whatsapp-url="whatsappUrl" />
       <RouterLink v-if="showStickyCart" :to="`/${store.slug}/cart`" class="storefront-sticky-cart" aria-label="Open cart and checkout">
         <div class="storefront-sticky-cart-copy"><strong>{{ money(cartState.cart.value?.subtotal_minor || 0, cartState.cart.value?.currency || store.currency) }}</strong><span>{{ cartState.itemCount.value }} items in cart</span></div>
         <span class="storefront-sticky-cart-cta">Checkout →</span>

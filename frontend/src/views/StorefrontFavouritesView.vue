@@ -4,6 +4,8 @@ import { RouterLink, useRoute } from 'vue-router'
 import { useCartState } from '../lib/cart-state'
 import { loadFavorites, toggleFavorite as toggleFavoriteStore } from '../lib/favorites'
 import { getStorefront, type Storefront, type StorefrontProduct } from '../lib/storefront'
+import { whatsappContactUrl } from '../lib/share'
+import StorefrontBottomNav from '../components/StorefrontBottomNav.vue'
 import { APP_NAME } from '../lib/branding'
 
 const route = useRoute()
@@ -14,6 +16,11 @@ const loading = ref(true)
 const error = ref('')
 const favorites = ref<string[]>([])
 
+const whatsappUrl = computed(() =>
+  store.value?.contact_phone
+    ? whatsappContactUrl(store.value.contact_phone, `Hi ${store.value.name}! I saw your shop on ${APP_NAME}.`)
+    : null,
+)
 const favoriteProducts = computed(() => {
   const set = new Set(favorites.value)
   return (store.value?.products || []).filter((p) => set.has(p.public_id))
@@ -110,7 +117,11 @@ onMounted(async () => {
           <RouterLink :to="`/${store.slug}`" class="button button-primary">Browse the store</RouterLink>
         </div>
       </section>
-      <footer class="storefront-footer">{{ store.name }} · Powered by {{ APP_NAME }}</footer>
+      <footer class="storefront-footer">
+        <span>{{ store.name }} · Powered by {{ APP_NAME }}</span>
+        <RouterLink :to="`/${store.slug}/track`" class="storefront-footer-link">Track an order</RouterLink>
+      </footer>
+      <StorefrontBottomNav :store-slug="store.slug" :cart-count="cartState.itemCount.value" :whatsapp-url="whatsappUrl" />
     </template>
   </main>
 </template>

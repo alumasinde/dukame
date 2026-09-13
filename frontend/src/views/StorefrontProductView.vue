@@ -4,7 +4,8 @@ import { RouterLink, useRoute } from 'vue-router'
 import { addCartItem } from '../lib/cart'
 import { useCartState } from '../lib/cart-state'
 import { isFavorite as checkFavorite, toggleFavorite as toggleFavoriteStore } from '../lib/favorites'
-import { productShareText, shareContent, whatsappShareUrl } from '../lib/share'
+import { productShareText, shareContent, whatsappContactUrl, whatsappShareUrl } from '../lib/share'
+import StorefrontBottomNav from '../components/StorefrontBottomNav.vue'
 import { getStorefront, getStorefrontProduct, isNewProduct, relatedProducts, type StorefrontProduct } from '../lib/storefront'
 import { APP_NAME } from '../lib/branding'
 
@@ -41,6 +42,10 @@ const waShare = computed(() => {
   if (!product.value) return ''
   return whatsappShareUrl(productShareText(product.value.name, priceLabel.value, productUrl.value))
 })
+const storePhone = ref<string | null>(null)
+const whatsappUrl = computed(() =>
+  storePhone.value ? whatsappContactUrl(storePhone.value, `Hi ${storeName.value}! I saw your shop on ${APP_NAME}.`) : null,
+)
 const related = computed(() => product.value ? relatedProducts(catalog.value, product.value, 4) : [])
 const showNew = computed(() => product.value ? isNewProduct(product.value) : false)
 
@@ -82,6 +87,7 @@ onMounted(async () => {
     catalog.value = storeResponse.data.products || []
     storeName.value = storeResponse.data.name
     storeCurrency.value = storeResponse.data.currency
+    storePhone.value = storeResponse.data.contact_phone || null
     document.title = `${product.value.name} · ${storeName.value}`
     favorite.value = checkFavorite(storeSlug, product.value.public_id)
     for (const group of optionGroups.value) selectedOptions[group.public_id] = group.values[0]?.public_id || ''
@@ -197,6 +203,8 @@ onMounted(async () => {
         </div>
         <span class="storefront-sticky-cart-cta">Checkout →</span>
       </RouterLink>
+            <StorefrontBottomNav :store-slug="storeSlug" :cart-count="cartState.itemCount.value" :whatsapp-url="whatsappUrl" />
+
     </template>
   </main>
 </template>

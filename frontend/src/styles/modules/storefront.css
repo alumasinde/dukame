@@ -63,7 +63,6 @@
 .storefront-empty h2, .storefront-state h1 { margin: 6px 0 0; font-size: 22px; }
 .storefront-empty p, .storefront-state p { max-width: 430px; margin: 0 0 12px; color: var(--muted); font-size: 12px; line-height: 1.6; }
 .storefront-empty-icon { width: 48px; height: 48px; display: grid; place-items: center; border-radius: 14px; background: var(--soft); color: var(--primary); font-weight: 850; }
-.storefront-footer { padding: 22px; text-align: center; color: #84928e; border-top: 1px solid var(--line); font-size: 10px; }
 
 .storefront-product-page { width: min(1160px, calc(100% - 36px)); margin: 0 auto; padding: 24px 0 80px; }
 .storefront-back { display: inline-flex; margin-bottom: 20px; color: #56706a; font-size: 12px; font-weight: 700; text-decoration: none; }
