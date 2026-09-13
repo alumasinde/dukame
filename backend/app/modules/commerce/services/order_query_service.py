@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import secrets
+
 from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,9 +14,13 @@ from app.modules.catalogue.services.context import resolve_store
 from app.modules.commerce.models.order import Order
 from app.modules.commerce.models.order_item import OrderItem
 from app.modules.commerce.models.order_status import OrderStatus
+from app.modules.commerce.models.order_status_history import OrderStatusHistory
 from app.modules.commerce.models.order_status_transition import OrderStatusTransition
+from app.modules.commerce.services.order_helpers import (
+    _load_order,
+    _load_order_by_public_id,
+)
 from app.modules.commerce.tracking import tracking_token, tracking_token_hash
-from app.modules.commerce.services.order_helpers import _load_order, _load_order_by_public_id
 
 
 class OrderQueryService:
@@ -47,6 +52,11 @@ class OrderQueryService:
                 selectinload(Order.items).selectinload(OrderItem.product),
                 selectinload(Order.items).selectinload(OrderItem.variant),
                 selectinload(Order.customer),
+                selectinload(Order.payment),
+                selectinload(Order.status_history).selectinload(
+                    OrderStatusHistory.status
+                ),
+                selectinload(Order.payment),  # ← add this
             )
             .where(Order.store_id == store.id)
             .order_by(Order.created_at.desc())
@@ -189,6 +199,11 @@ class OrderQueryService:
                 selectinload(Order.items).selectinload(OrderItem.product),
                 selectinload(Order.items).selectinload(OrderItem.variant),
                 selectinload(Order.customer),
+                selectinload(Order.payment),
+                selectinload(Order.status_history).selectinload(
+                    OrderStatusHistory.status
+                ),
+                selectinload(Order.status_history),
             )
             .where(
                 Order.store_id == store.id,
@@ -202,12 +217,9 @@ class OrderQueryService:
                 detail="Order not found",
             )
 
-        if (
-            order.tracking_token_hash is not None
-            and not secrets.compare_digest(
-                order.tracking_token_hash,
-                tracking_token_hash(token),
-            )
+        if order.tracking_token_hash is not None and not secrets.compare_digest(
+            order.tracking_token_hash,
+            tracking_token_hash(token),
         ):
             raise HTTPException(
                 status_code=404,

@@ -54,6 +54,7 @@ class Settings(BaseSettings):
     cart_session_ttl_seconds: int = Field(default=2592000, ge=3600, le=31536000)
     cart_item_max_quantity: int = Field(default=1000, ge=1, le=100000)
     delivery_otp_ttl_minutes: int = Field(default=15, ge=1, le=120)
+    payment_reservation_ttl_minutes: int = Field(default=15, ge=1, le=120)
     delivery_otp_max_attempts: int = Field(default=5, ge=1, le=20)
     trusted_hosts: list[str] = Field(
         default_factory=lambda: ["localhost", "127.0.0.1", "dukamedev.local"]

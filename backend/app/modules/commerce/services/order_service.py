@@ -13,20 +13,13 @@ from app.modules.commerce.services.order_status_service import OrderStatusServic
 
 
 class OrderService:
-    """
-    Facade service that combines order-related functionality.
-    
-    This maintains backward compatibility while delegating to specialized services.
-    """
-
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
-        self.checkout = OrderCheckoutService(db)
+        self._checkout_service = OrderCheckoutService(db)   # renamed
         self.inventory = OrderInventoryService(db)
         self.status = OrderStatusService(db)
         self.query = OrderQueryService(db)
 
-    # Checkout methods (delegated to OrderCheckoutService)
     async def checkout(
         self,
         store: Store,
@@ -35,7 +28,7 @@ class OrderService:
         idempotency_key: str | None = None,
     ):
         """Create an order from a cart."""
-        return await self.checkout.checkout(store, token, payload, idempotency_key)
+        return await self._checkout_service.checkout(store, token, payload, idempotency_key)
 
     # Inventory methods (delegated to OrderInventoryService)
     async def finalize_order_payment(self, order_id: int) -> None:

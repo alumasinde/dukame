@@ -79,6 +79,7 @@ class PaymentService:
             customer_phone=phone,
         )
         payment.payment_method = method
+        payment.order = order 
         self.db.add(payment)
         await self.db.flush()
         return payment

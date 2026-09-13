@@ -108,12 +108,6 @@ async def get_cart(
     set_cart_cookie(response, store, token)
     return cart_response(cart)
 
-@router.get("/{store_slug}/payment-methods", response_model=list)
-async def list_storefront_payment_methods(store_slug: str, db: AsyncSession = Depends(get_db)):
-    store = await get_store(db, store_slug)
-    return await PaymentService(db).list_public_methods(store)
-
-
 @router.post("/{store_slug}/cart/items", response_model=CartResponse)
 async def add_cart_item(
     store_slug: str,
