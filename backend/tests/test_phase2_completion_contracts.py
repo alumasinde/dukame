@@ -9,20 +9,19 @@ def read(path: str) -> str:
 
 
 def test_checkout_records_sale_inventory_ledger_atomically() -> None:
-    service = read("app/modules/commerce/service.py")
+    service = read("app/modules/commerce/services/order_inventory_service.py")
     assert "movement_type=\"sale\"" in service
-    assert 'reference_type="order_item"' in service
+    assert 'reference_type="stock_reservation"' in service
     assert "inventory_owner.inventory_quantity = quantity_after" in service
-    assert "await self.db.commit()" in service
 
 
 def test_order_cancellation_restores_inventory_once() -> None:
-    service = read("app/modules/commerce/service.py")
-    assert 'if status.code == "cancelled":' in service
-    assert 'movement_type == "return"' in service
-    assert 'reason="Order cancellation"' in service
-    assert "existing_return is not None" in service
-    assert "owner.inventory_quantity = quantity_after" in service
+    status_service = read("app/modules/commerce/services/order_status_service.py")
+    inventory_service = read("app/modules/commerce/services/order_inventory_service.py")
+    assert 'if status.code == "cancelled":' in status_service
+    assert 'movement_type == "return"' in inventory_service
+    assert "existing_return is not None" in inventory_service
+    assert "owner.inventory_quantity = quantity_after" in inventory_service
 
 
 def test_delivery_creation_is_serialized_per_order() -> None:

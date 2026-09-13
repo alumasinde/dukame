@@ -104,7 +104,7 @@ async def get_cart(
     cart, token, created = await service.get_or_create_cart(store, dukame_cart)
     if created:
         await db.commit()
-    cart = await service._load_cart(cart.id)
+    cart = await service.load_cart(cart.id)
     set_cart_cookie(response, store, token)
     return cart_response(cart)
 

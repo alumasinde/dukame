@@ -3,7 +3,7 @@ import inspect
 
 from app.modules.commerce.models.idempotency_key import IdempotencyKey
 from app.modules.commerce.models.order_status_transition import OrderStatusTransition
-from app.modules.commerce.service import CommerceService
+from app.modules.commerce.services.order_status_service import OrderStatusService
 
 transition_permissions = importlib.import_module(
     "migrations.versions.0018_order_transition_permissions"
@@ -34,7 +34,7 @@ def test_every_seeded_order_transition_has_a_granular_permission() -> None:
 
 
 def test_status_update_no_longer_uses_broad_status_permission() -> None:
-    source = inspect.getsource(CommerceService.update_order_status)
+    source = inspect.getsource(OrderStatusService.update_order_status)
     assert '"orders.status.manage"' not in source
     assert "transition.permission.key" in source
 
@@ -50,6 +50,7 @@ def test_idempotency_key_is_store_and_operation_scoped() -> None:
 
 
 def test_checkout_and_status_update_accept_idempotency_keys() -> None:
-    assert "idempotency_key" in inspect.signature(CommerceService.checkout).parameters
-    assert "idempotency_key" in inspect.signature(CommerceService.update_order_status).parameters
-    assert "_claim_idempotency" in inspect.getsource(CommerceService)
+    from app.modules.commerce.services.order_checkout_service import OrderCheckoutService
+    assert "idempotency_key" in inspect.signature(OrderCheckoutService.checkout).parameters
+    assert "idempotency_key" in inspect.signature(OrderStatusService.update_order_status).parameters
+    assert "self.idempotency.claim_key" in inspect.getsource(OrderCheckoutService)

@@ -1,7 +1,17 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { api } from '../lib/api'
-import { createRole, getPermissions, getRoles, type Permission, type Role, type RoleCreate, type RolePermissionsUpdate } from '../lib/cart'
+import {
+  createRole,
+  getPermissions,
+  getRoles,
+  updateRolePermissions as saveRolePermissions,
+  type Permission,
+  type Role,
+  type RoleCreate,
+  type RolePermissionsUpdate,
+} from '../lib/cart'
+
 import { useAuthStore } from '../stores/auth'
 
 const auth = useAuthStore()
@@ -76,7 +86,11 @@ async function createNewRole() {
 async function updateRolePermissions() {
   if (!tenantId.value || !selectedRole.value) return
   try {
-    await updateRolePermissions(tenantId.value, selectedRole.value.public_id, editRoleForm)
+    await saveRolePermissions(
+  tenantId.value,
+  selectedRole.value.public_id,
+  editRoleForm,
+)
     showEditRoleForm.value = false
     selectedRole.value = null
     editRoleForm.permissions = []

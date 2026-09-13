@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useAuthStore } from '../stores/auth'
-import { assignDelivery, confirmDelivery, getNextOrderStatuses, getOrder, getOrderStatuses, getOrders, issueDeliveryOtp, markCashPaymentPaid, updateOrderStatus, type Delivery, type DeliveryAssign, type DeliveryConfirm, type Order, type OrderStatus } from '../lib/cart'
+import { assignDelivery, confirmDelivery, getDelivery, getNextOrderStatuses, getOrder, getOrderStatuses, getOrders, issueDeliveryOtp, markCashPaymentPaid, updateOrderStatus, type Delivery, type DeliveryAssign, type DeliveryConfirm, type Order, type OrderStatus } from '../lib/cart'
 
 const auth = useAuthStore()
 const orders = ref<Order[]>([])
@@ -171,7 +171,7 @@ onMounted(load)
                 <h4>Confirm delivery</h4>
                 <div class="form-group"><label>Enter OTP</label><input v-model="otpInput" type="text" placeholder="6-digit code" maxlength="6" /></div>
                 <div class="form-group"><label>Delivery note <em>Optional</em></label><textarea v-model="deliveryNote" rows="2" placeholder="Any notes about the delivery" /></div>
-                <button class="button button-primary button-sm" type="button" :disabled="confirmingDelivery || !otpInput.value.trim()" @click="confirmDeliveryWithOtp">{{ confirmingDelivery ? 'Confirming…' : 'Confirm delivery' }}</button>
+                <button class="button button-primary button-sm" type="button" :disabled="confirmingDelivery || !otpInput.trim()" @click="confirmDeliveryWithOtp">{{ confirmingDelivery ? 'Confirming…' : 'Confirm delivery' }}</button>
               </div>
             </div>
             <div v-else class="delivery-empty"><p>No delivery information available. Click "Assign to me" to start delivery process.</p></div>

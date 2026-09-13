@@ -46,30 +46,24 @@ def test_customer_changes_are_audited() -> None:
 
 
 def test_checkout_associates_customer_by_store_scoped_phone() -> None:
-    service = read("app/modules/commerce/service.py")
-    assert 'async def _resolve_checkout_customer' in service
-    assert 'Customer.store_id == store.id' in service
-    assert 'Customer.phone == phone' in service
+    helpers = read("app/modules/commerce/services/order_helpers.py")
+    service = read("app/modules/commerce/services/order_checkout_service.py")
+    assert 'async def _resolve_checkout_customer' in helpers
+    assert 'Customer.store_id == store.id' in helpers
+    assert 'Customer.phone == phone' in helpers
     assert 'customer_id=customer.id if customer else None' in service
-    assert 'begin_nested()' in service
+    assert 'begin_nested()' in helpers
 
 
 def test_checkout_includes_delivery_fields() -> None:
     """Test that checkout process includes delivery information from payload."""
-    service = read("app/modules/commerce/service.py")
-    order_service = read("app/modules/commerce/services/order_service.py")
+    checkout_service = read("app/modules/commerce/services/order_checkout_service.py")
     
-    # Check old CommerceService
-    assert 'delivery_address=payload.delivery_address.strip()' in service
-    assert 'delivery_landmark=payload.delivery_landmark.strip()' in service
-    assert 'delivery_notes=payload.delivery_notes.strip()' in service
-    assert 'delivery_option=payload.delivery_option or "standard"' in service
-    
-    # Check new OrderService
-    assert 'delivery_address=payload.delivery_address.strip()' in order_service
-    assert 'delivery_landmark=payload.delivery_landmark.strip()' in order_service
-    assert 'delivery_notes=payload.delivery_notes.strip()' in order_service
-    assert 'delivery_option=payload.delivery_option or "standard"' in order_service
+    # Check new OrderCheckoutService
+    assert 'delivery_address=payload.delivery_address.strip()' in checkout_service
+    assert 'delivery_landmark=payload.delivery_landmark.strip()' in checkout_service
+    assert 'delivery_notes=payload.delivery_notes.strip()' in checkout_service
+    assert 'delivery_option=payload.delivery_option or "standard"' in checkout_service
 
 
 def test_order_model_exposes_customer_relationship() -> None:

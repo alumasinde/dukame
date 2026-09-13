@@ -15,6 +15,12 @@ const {
 } = useStorefrontShop()
 
 onMounted(() => { void load() })
+
+function hideRecentSearches() {
+  setTimeout(() => {
+    showRecent.value = false
+  }, 180)
+}
 </script>
 
 <template>
@@ -66,7 +72,7 @@ onMounted(() => { void load() })
           <div class="storefront-search-wrap">
             <label class="storefront-search" aria-label="Search products">
               <span aria-hidden="true">⌕</span>
-              <input :value="searchInput" type="search" placeholder="Search products…" autocomplete="off" @input="onSearchInput(($event.target as HTMLInputElement).value)" @focus="showRecent = recentSearches.length > 0" @keydown.enter.prevent="commitSearch" @blur="setTimeout(() => { showRecent = false }, 180)" />
+              <input :value="searchInput" type="search" placeholder="Search products…" autocomplete="off" @input="onSearchInput(($event.target as HTMLInputElement).value)" @focus="showRecent = recentSearches.length > 0" @keydown.enter.prevent="commitSearch" @blur="hideRecentSearches" />
               <button v-if="searchInput" type="button" aria-label="Clear search" @mousedown.prevent="clearSearch">×</button>
             </label>
             <div v-if="showRecent && recentSearches.length" class="storefront-recent" role="listbox">

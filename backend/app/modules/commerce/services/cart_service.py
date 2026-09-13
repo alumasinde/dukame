@@ -1,6 +1,8 @@
+
 from __future__ import annotations
-import secrets
+
 import hashlib
+import secrets
 from datetime import UTC, datetime, timedelta
 
 from fastapi import HTTPException
@@ -10,12 +12,13 @@ from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
 from app.core.time import ensure_utc
-from app.modules.catalogue.models.store import Store
 from app.modules.catalogue.models.product import Product
+from app.modules.catalogue.models.store import Store
 from app.modules.catalogue.models.variant import ProductVariant
 from app.modules.commerce.models.cart import Cart
 from app.modules.commerce.models.cart_item import CartItem
 from app.modules.commerce.schemas import CartItemAdd, CartItemUpdate
+
 
 class CartService:
     def __init__(self, db: AsyncSession) -> None:
@@ -27,150 +30,355 @@ class CartService:
 
     def _ensure_quantity(self, quantity: int) -> None:
         if quantity > settings.cart_item_max_quantity:
-            raise HTTPException(status_code=422, detail=f"Quantity cannot exceed {settings.cart_item_max_quantity}")
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "Quantity cannot exceed "
+                    f"{settings.cart_item_max_quantity}"
+                ),
+            )
 
-    def _ensure_stock_available(self, product: Product, variant: ProductVariant | None, quantity: int) -> None:
+    def _ensure_stock_available(
+        self,
+        product: Product,
+        variant: ProductVariant | None,
+        quantity: int,
+    ) -> None:
         inventory_owner = variant or product
+
         if not inventory_owner.inventory_tracking:
             return
-        if inventory_owner.inventory_quantity < quantity:
-            raise HTTPException(status_code=409, detail=f"Only {inventory_owner.inventory_quantity} item(s) are available")
 
-    async def _cart_by_token(self, store_id: int, token: str, lock: bool) -> Cart | None:
-        stmt = select(Cart).where(Cart.store_id == store_id, Cart.session_token_hash == self._hash_token(token))
+        if inventory_owner.inventory_quantity < quantity:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Only "
+                    f"{inventory_owner.inventory_quantity} "
+                    "item(s) are available"
+                ),
+            )
+
+    async def _cart_by_token(
+        self,
+        store_id: int,
+        token: str,
+        lock: bool,
+    ) -> Cart | None:
+        stmt = select(Cart).where(
+            Cart.store_id == store_id,
+            Cart.session_token_hash == self._hash_token(token),
+        )
+
         if lock:
             stmt = stmt.with_for_update()
+
         return await self.db.scalar(stmt)
 
-    async def _load_cart(self, cart_id: int) -> Cart:
-        return await self.db.scalar(
-            select(Cart).options(
-                selectinload(Cart.items).selectinload(CartItem.product).selectinload(Product.media),
-                selectinload(Cart.items).selectinload(CartItem.variant).selectinload(ProductVariant.option_value_links)
-            ).where(Cart.id == cart_id)
+    async def load_cart(self, cart_id: int) -> Cart:
+        cart = await self.db.scalar(
+            select(Cart)
+            .options(
+                selectinload(Cart.items)
+                .selectinload(CartItem.product)
+                .selectinload(Product.media),
+                selectinload(Cart.items)
+                .selectinload(CartItem.variant)
+                .selectinload(ProductVariant.option_value_links),
+            )
+            .where(Cart.id == cart_id)
         )
 
-    async def get_or_create_cart(self, store: Store, token: str | None) -> tuple[Cart, str, bool]:
+        if cart is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Cart not found",
+            )
+
+        return cart
+
+    async def _load_cart(self, cart_id: int) -> Cart:
+        """
+        Backward-compatible alias.
+
+        New code should call load_cart().
+        """
+        return await self.load_cart(cart_id)
+
+    async def get_or_create_cart(
+        self,
+        store: Store,
+        token: str | None,
+    ) -> tuple[Cart, str, bool]:
         if token:
-            cart = await self._cart_by_token(store.id, token, lock=False)
+            cart = await self._cart_by_token(
+                store.id,
+                token,
+                lock=False,
+            )
+
             now = datetime.now(UTC)
+
             if cart is not None and cart.checked_out_at is None:
                 expires_at = ensure_utc(cart.expires_at)
+
                 if expires_at > now:
                     return cart, token, False
+
         raw_token = secrets.token_urlsafe(32)
         now = datetime.now(UTC)
+
         cart = Cart(
-            public_id=secrets.token_hex(16), 
-            store_id=store.id, 
-            session_token_hash=self._hash_token(raw_token), 
-            currency=store.currency, 
-            expires_at=now + timedelta(seconds=settings.cart_session_ttl_seconds)
+            public_id=secrets.token_hex(16),
+            store_id=store.id,
+            session_token_hash=self._hash_token(raw_token),
+            currency=store.currency,
+            expires_at=now
+            + timedelta(seconds=settings.cart_session_ttl_seconds),
         )
+
         self.db.add(cart)
         await self.db.flush()
+
         return cart, raw_token, True
 
-    async def read_cart(self, store: Store, token: str | None) -> Cart:
+    async def read_cart(
+        self,
+        store: Store,
+        token: str | None,
+    ) -> Cart:
         cart, _, created = await self.get_or_create_cart(store, token)
+
         if created:
             await self.db.commit()
-        return await self._load_cart(cart.id)
 
-    async def add_item(self, store: Store, token: str, payload: CartItemAdd) -> Cart:
+        return await self.load_cart(cart.id)
+
+    async def add_item(
+        self,
+        store: Store,
+        token: str,
+        payload: CartItemAdd,
+    ) -> Cart:
         self._ensure_quantity(payload.quantity)
+
         cart = await self.require_cart(store.id, token)
-        product = await self._product_for_cart(store.id, payload.product_public_id)
-        variant = await self._resolve_variant(store.id, product, payload.variant_public_id)
-        unit_price = variant.price_minor if variant and variant.price_minor is not None else product.price_minor
+
+        product = await self._product_for_cart(
+            store.id,
+            payload.product_public_id,
+        )
+
+        variant = await self._resolve_variant(
+            store.id,
+            product,
+            payload.variant_public_id,
+        )
+
+        unit_price = (
+            variant.price_minor
+            if variant and variant.price_minor is not None
+            else product.price_minor
+        )
+
         existing = await self.db.scalar(
             select(CartItem).where(
-                CartItem.cart_id == cart.id, 
-                CartItem.product_id == product.id, 
-                CartItem.variant_id == (variant.id if variant else None)
+                CartItem.cart_id == cart.id,
+                CartItem.product_id == product.id,
+                CartItem.variant_id == (
+                    variant.id if variant else None
+                ),
             )
         )
-        new_quantity = (existing.quantity if existing else 0) + payload.quantity
+
+        new_quantity = (
+            (existing.quantity if existing else 0)
+            + payload.quantity
+        )
+
         self._ensure_quantity(new_quantity)
-        self._ensure_stock_available(product, variant, new_quantity)
+        self._ensure_stock_available(
+            product,
+            variant,
+            new_quantity,
+        )
+
         if existing:
             existing.quantity = new_quantity
             existing.unit_price_minor = unit_price
         else:
             self.db.add(
                 CartItem(
-                    public_id=secrets.token_hex(16), 
-                    cart_id=cart.id, 
-                    product_id=product.id, 
-                    variant_id=variant.id if variant else None, 
-                    quantity=payload.quantity, 
-                    unit_price_minor=unit_price
+                    public_id=secrets.token_hex(16),
+                    cart_id=cart.id,
+                    product_id=product.id,
+                    variant_id=variant.id if variant else None,
+                    quantity=payload.quantity,
+                    unit_price_minor=unit_price,
                 )
             )
-        await self.db.commit()
-        return await self._load_cart(cart.id)
 
-    async def update_item(self, store: Store, token: str, item_public_id: str, payload: CartItemUpdate) -> Cart:
+        await self.db.commit()
+
+        return await self.load_cart(cart.id)
+
+    async def update_item(
+        self,
+        store: Store,
+        token: str,
+        item_public_id: str,
+        payload: CartItemUpdate,
+    ) -> Cart:
         self._ensure_quantity(payload.quantity)
-        cart = await self.require_cart(store.id, token)
-        item = await self.db.scalar(
-            select(CartItem).options(
-                selectinload(CartItem.product), 
-                selectinload(CartItem.variant)
-            ).where(CartItem.cart_id == cart.id, CartItem.public_id == item_public_id)
-        )
-        if item is None:
-            raise HTTPException(status_code=404, detail="Cart item not found")
-        self._ensure_stock_available(item.product, item.variant, payload.quantity)
-        item.quantity = payload.quantity
-        await self.db.commit()
-        return await self._load_cart(cart.id)
 
-    async def remove_item(self, store: Store, token: str, item_public_id: str) -> Cart:
         cart = await self.require_cart(store.id, token)
+
         item = await self.db.scalar(
-            select(CartItem).where(CartItem.cart_id == cart.id, CartItem.public_id == item_public_id)
+            select(CartItem)
+            .options(
+                selectinload(CartItem.product),
+                selectinload(CartItem.variant),
+            )
+            .where(
+                CartItem.cart_id == cart.id,
+                CartItem.public_id == item_public_id,
+            )
         )
+
         if item is None:
-            raise HTTPException(status_code=404, detail="Cart item not found")
+            raise HTTPException(
+                status_code=404,
+                detail="Cart item not found",
+            )
+
+        self._ensure_stock_available(
+            item.product,
+            item.variant,
+            payload.quantity,
+        )
+
+        item.quantity = payload.quantity
+
+        await self.db.commit()
+
+        return await self.load_cart(cart.id)
+
+    async def remove_item(
+        self,
+        store: Store,
+        token: str,
+        item_public_id: str,
+    ) -> Cart:
+        cart = await self.require_cart(store.id, token)
+
+        item = await self.db.scalar(
+            select(CartItem).where(
+                CartItem.cart_id == cart.id,
+                CartItem.public_id == item_public_id,
+            )
+        )
+
+        if item is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Cart item not found",
+            )
+
         await self.db.delete(item)
         await self.db.commit()
-        return await self._load_cart(cart.id)
 
-    async def require_cart(self, store_id: int, token: str) -> Cart:
-        cart = await self._cart_by_token(store_id, token, lock=True)
+        return await self.load_cart(cart.id)
+
+    async def require_cart(
+        self,
+        store_id: int,
+        token: str,
+    ) -> Cart:
+        cart = await self._cart_by_token(
+            store_id,
+            token,
+            lock=True,
+        )
+
         now = datetime.now(UTC)
         expires_at = ensure_utc(cart.expires_at) if cart else None
-        if cart is None or cart.checked_out_at is not None or expires_at is None or expires_at <= now:
-            raise HTTPException(status_code=409, detail="Your cart has expired. Please start a new cart.")
+
+        if (
+            cart is None
+            or cart.checked_out_at is not None
+            or expires_at is None
+            or expires_at <= now
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Your cart has expired. "
+                    "Please start a new cart."
+                ),
+            )
+
         return cart
 
-    async def _product_for_cart(self, store_id: int, public_id: str) -> Product:
+    async def _product_for_cart(
+        self,
+        store_id: int,
+        public_id: str,
+    ) -> Product:
         product = await self.db.scalar(
-            select(Product).options(selectinload(Product.variants)).where(
-                Product.store_id == store_id, 
-                Product.public_id == public_id, 
-                Product.status == "active"
+            select(Product)
+            .options(selectinload(Product.variants))
+            .where(
+                Product.store_id == store_id,
+                Product.public_id == public_id,
+                Product.status == "active",
             )
         )
+
         if product is None:
-            raise HTTPException(status_code=404, detail="Product not found")
+            raise HTTPException(
+                status_code=404,
+                detail="Product not found",
+            )
+
         return product
 
-    async def _resolve_variant(self, store_id: int, product: Product, public_id: str | None) -> ProductVariant | None:
-        active_variants = [variant for variant in product.variants if variant.status == "active"]
+    async def _resolve_variant(
+        self,
+        store_id: int,
+        product: Product,
+        public_id: str | None,
+    ) -> ProductVariant | None:
+        active_variants = [
+            variant
+            for variant in product.variants
+            if variant.status == "active"
+        ]
+
         if active_variants and public_id is None:
-            raise HTTPException(status_code=422, detail="Select a product option before adding this item")
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "Select a product option before "
+                    "adding this item"
+                ),
+            )
+
         if public_id is None:
             return None
+
         variant = await self.db.scalar(
             select(ProductVariant).where(
-                ProductVariant.store_id == store_id, 
-                ProductVariant.product_id == product.id, 
-                ProductVariant.public_id == public_id, 
-                ProductVariant.status == "active"
+                ProductVariant.store_id == store_id,
+                ProductVariant.product_id == product.id,
+                ProductVariant.public_id == public_id,
+                ProductVariant.status == "active",
             )
         )
+
         if variant is None:
-            raise HTTPException(status_code=422, detail="Selected product option is not available")
+            raise HTTPException(
+                status_code=422,
+                detail="Selected product option is not available",
+            )
+
         return variant

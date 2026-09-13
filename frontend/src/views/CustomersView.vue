@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { createCustomer, getCustomer, getCustomerOrders, getCustomers, updateCustomer, type Customer, type CustomerCreate, type CustomerOrder, type CustomerUpdate } from '../lib/cart'
 import { useAuthStore } from '../stores/auth'
 
