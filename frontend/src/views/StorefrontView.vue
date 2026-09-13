@@ -2,6 +2,7 @@
 import { onMounted } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useStorefrontShop } from '../lib/useStorefrontShop'
+import { APP_NAME } from '../lib/branding'
 
 const {
   store, loading, error, selectedCategory, searchQuery, searchInput, sortBy, page,
@@ -26,12 +27,12 @@ function hideRecentSearches() {
 <template>
   <main class="storefront-page" id="storefront-main">
     <div v-if="loading" class="storefront-state"><div class="status-spinner" /><p>Loading store…</p></div>
-    <div v-else-if="error" class="storefront-state"><div class="storefront-empty-icon">!</div><h1>Store unavailable</h1><p>{{ error }}</p><RouterLink to="/login" class="button button-primary">Go to DukaMe</RouterLink></div>
+    <div v-else-if="error" class="storefront-state"><div class="storefront-empty-icon">!</div><h1>Store unavailable</h1><p>{{ error }}</p><RouterLink to="/login" class="button button-primary">Go to {{ APP_NAME }}</RouterLink></div>
     <template v-else-if="store">
       <header class="storefront-header">
         <RouterLink :to="`/${store.slug}`" class="storefront-brand storefront-brand-link">
           <span class="storefront-mark">{{ store.name.charAt(0).toUpperCase() }}</span>
-          <div><strong>{{ store.name }}</strong><small>Powered by DukaMe</small></div>
+          <div><strong>{{ store.name }}</strong><small>Powered by {{ APP_NAME }}</small></div>
         </RouterLink>
         <div class="storefront-header-actions">
           <RouterLink :to="`/${store.slug}/track`" class="storefront-header-link is-track" title="Track order">Track</RouterLink>
@@ -155,7 +156,7 @@ function hideRecentSearches() {
           </div>
         </div>                        
       </section>
-      <footer class="storefront-footer">{{ store.name }} · Powered by DukaMe.</footer>
+      <footer class="storefront-footer">{{ store.name }} · Powered by {{ APP_NAME}}.</footer>
       <RouterLink v-if="showStickyCart" :to="`/${store.slug}/cart`" class="storefront-sticky-cart" aria-label="Open cart and checkout">
         <div class="storefront-sticky-cart-copy"><strong>{{ money(cartState.cart.value?.subtotal_minor || 0, cartState.cart.value?.currency || store.currency) }}</strong><span>{{ cartState.itemCount.value }} items in cart</span></div>
         <span class="storefront-sticky-cart-cta">Checkout →</span>

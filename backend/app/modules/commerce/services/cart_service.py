@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import hashlib
@@ -6,7 +5,7 @@ import secrets
 from datetime import UTC, datetime, timedelta
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -17,6 +16,7 @@ from app.modules.catalogue.models.store import Store
 from app.modules.catalogue.models.variant import ProductVariant
 from app.modules.commerce.models.cart import Cart
 from app.modules.commerce.models.cart_item import CartItem
+from app.modules.commerce.models.stock_reservation import StockReservation
 from app.modules.commerce.schemas import CartItemAdd, CartItemUpdate
 
 
@@ -38,23 +38,42 @@ class CartService:
                 ),
             )
 
-    def _ensure_stock_available(
+    async def _ensure_stock_available(
         self,
         product: Product,
         variant: ProductVariant | None,
         quantity: int,
+        exclude_order_id: int | None = None,
     ) -> None:
+       
         inventory_owner = variant or product
 
         if not inventory_owner.inventory_tracking:
             return
 
-        if inventory_owner.inventory_quantity < quantity:
+        reservation_filters = [
+            StockReservation.product_id == product.id,
+            StockReservation.variant_id == (variant.id if variant else None),
+            StockReservation.status == "pending",
+            StockReservation.expires_at > datetime.now(UTC),
+        ]
+        if exclude_order_id is not None:
+            reservation_filters.append(StockReservation.order_id != exclude_order_id)
+
+        reserved = await self.db.scalar(
+            select(func.coalesce(func.sum(StockReservation.quantity), 0)).where(
+                *reservation_filters
+            )
+        )
+
+        available = inventory_owner.inventory_quantity - reserved
+
+        if available < quantity:
             raise HTTPException(
                 status_code=409,
                 detail=(
                     "Only "
-                    f"{inventory_owner.inventory_quantity} "
+                    f"{max(available, 0)} "
                     "item(s) are available"
                 ),
             )
@@ -197,7 +216,7 @@ class CartService:
         )
 
         self._ensure_quantity(new_quantity)
-        self._ensure_stock_available(
+        await self._ensure_stock_available(
             product,
             variant,
             new_quantity,
@@ -251,7 +270,7 @@ class CartService:
                 detail="Cart item not found",
             )
 
-        self._ensure_stock_available(
+        await self._ensure_stock_available(
             item.product,
             item.variant,
             payload.quantity,

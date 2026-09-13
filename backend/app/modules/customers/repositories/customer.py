@@ -3,6 +3,8 @@ from typing import cast
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload 
+
 
 from app.modules.commerce.models.order import Order
 from app.modules.commerce.models.order_status import OrderStatus
@@ -59,6 +61,7 @@ class CustomerRepository:
     async def list_orders(self, store_id: int, customer_id: int, offset: int, limit: int) -> builtins.list[Order]:
         stmt = (
             select(Order)
+            .options(selectinload(Order.status))
             .join(OrderStatus, OrderStatus.id == Order.status_id)
             .where(Order.store_id == store_id, Order.customer_id == customer_id)
             .order_by(Order.created_at.desc(), Order.id.desc())

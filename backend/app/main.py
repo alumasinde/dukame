@@ -26,7 +26,7 @@ load_models()
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-    configure_logging(settings.log_level)
+    configure_logging(settings.log_level, settings.log_dir)
     try:
         yield
     finally:

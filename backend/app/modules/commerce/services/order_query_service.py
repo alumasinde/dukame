@@ -56,7 +56,6 @@ class OrderQueryService:
                 selectinload(Order.status_history).selectinload(
                     OrderStatusHistory.status
                 ),
-                selectinload(Order.payment),  # ← add this
             )
             .where(Order.store_id == store.id)
             .order_by(Order.created_at.desc())
@@ -203,7 +202,6 @@ class OrderQueryService:
                 selectinload(Order.status_history).selectinload(
                     OrderStatusHistory.status
                 ),
-                selectinload(Order.status_history),
             )
             .where(
                 Order.store_id == store.id,

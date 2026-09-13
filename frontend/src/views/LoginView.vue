@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { getRequestId } from '../lib/api'
+import { APP_NAME } from '../lib/branding'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -45,7 +46,7 @@ async function submit() {
   <main class="auth-page">
     <div class="auth-brand">
       <span class="brand-mark">D</span>
-      <strong>DukaMe</strong>
+      <strong>{{ APP_NAME }}</strong>
     </div>
 
     <section class="auth-card" aria-labelledby="login-title">
@@ -82,9 +83,9 @@ async function submit() {
         </button>
       </form>
 
-      <div class="auth-divider"><span>New to DukaMe?</span></div>
+      <div class="auth-divider"><span>New to {{ APP_NAME }}?</span></div>
       <RouterLink to="/register" class="button button-secondary button-block">Create an account</RouterLink>
-      <p class="auth-note">Secure access to your DukaMe merchant workspace.</p>
+      <p class="auth-note">Secure access to your {{ APP_NAME}} merchant workspace.</p>
     </section>
   </main>
 </template>

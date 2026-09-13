@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     environment: str = "development"
     debug: bool = False
     log_level: str = "INFO"
+    log_dir: str = "logs"
     database_url: MySQLDsn = Field(alias="DATABASE_URL")
     redis_url: RedisDsn = Field(alias="REDIS_URL")
     jwt_secret: SecretStr = Field(alias="JWT_SECRET")

@@ -87,7 +87,7 @@ async def _lock_and_verify_catalog(
                     detail=f"{product.name} has an unavailable option",
                 )
 
-        cart_service._ensure_stock_available(
+        await cart_service._ensure_stock_available(
             product,
             variant,
             item.quantity,

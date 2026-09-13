@@ -7,12 +7,13 @@ services:
       - .env
     ports:
       - "8000:8000"
+      - "5678:5678"
     volumes:
       - ./app:/app/app
       - ./migrations:/app/migrations
       - ./tests:/app/tests
       - ./uploads:/app/uploads
-    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--no-access-log"]
+    command: ["python", "-m", "debugpy", "--listen", "0.0.0.0:5678", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--no-access-log"]
     depends_on:
       redis:
         condition: service_healthy

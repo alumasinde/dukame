@@ -37,6 +37,8 @@ DEV_API_PROXY_TARGET=http://localhost:8000
 # 1. Backend + worker + Redis
 cd backend
 docker compose -f docker-compose.dev.yml up --build
+docker compose -f docker-compose.dev.yml up
+
 
 # 2. Migrations (new terminal)
 docker compose -f docker-compose.dev.yml run --rm api alembic upgrade head
