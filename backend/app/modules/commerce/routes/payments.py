@@ -45,13 +45,28 @@ def _validate_mpesa_paybill_config(config: dict) -> tuple[str, str, str, str]:
     return payment_type, number, account_mode, account_reference
 
 
-def method_response(method: PaymentMethod, callback_url: str | None = None, callback_token: str | None = None, merchant: bool = False) -> PaymentMethodResponse:
+def method_response(method: PaymentMethod, callback_url: str | None = None, callback_token: str | None = None, merchant: bool = False) -> dict[str, Any]:
     display_code = "mpesa" if method.code == "mpesa_paybill" else method.code
     payment_type = method.payment_type
     if payment_type is None and method.code in {"mpesa", "mpesa_paybill"} and method.config_encrypted:
         config = decrypt_config(method.config_encrypted)
         payment_type = str(config.get("payment_type") or ("stk_push" if method.code == "mpesa" else "paybill"))
-    return PaymentMethodResponse(public_id=method.public_id, code=display_code, name=method.name, is_enabled=method.is_enabled, payment_type=payment_type, instructions=method.instructions, callback_url=callback_url if merchant else None, callback_token=callback_token if merchant else None)
+        
+    # Create the schema representation
+    response_obj = PaymentMethodResponse(
+        public_id=method.public_id, 
+        code=display_code, 
+        name=method.name, 
+        is_enabled=method.is_enabled, 
+        payment_type=payment_type, 
+        instructions=method.instructions, 
+        callback_url=callback_url if merchant else None, 
+        callback_token=callback_token if merchant else None
+    )
+    
+    # 🌟 VITAL FIX: Dump to a standard dictionary to resolve the serialization crash
+    return response_obj.model_dump()
+
 
 
 @router.get("/storefront/{store_slug}/payment-methods", response_model=list[PaymentMethodResponse])

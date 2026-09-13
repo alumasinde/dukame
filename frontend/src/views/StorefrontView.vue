@@ -153,9 +153,9 @@ function hideRecentSearches() {
             <span>Page {{ page }} of {{ totalPages }}</span>
             <button type="button" :disabled="page >= totalPages" @click="page = Math.min(totalPages, page + 1)">Next</button>
           </div>
-        </div>
+        </div>                        
       </section>
-      <footer class="storefront-footer">{{ store.name }} · Powered by DukaMe</footer>
+      <footer class="storefront-footer">{{ store.name }} · Powered by DukaMe.</footer>
       <RouterLink v-if="showStickyCart" :to="`/${store.slug}/cart`" class="storefront-sticky-cart" aria-label="Open cart and checkout">
         <div class="storefront-sticky-cart-copy"><strong>{{ money(cartState.cart.value?.subtotal_minor || 0, cartState.cart.value?.currency || store.currency) }}</strong><span>{{ cartState.itemCount.value }} items in cart</span></div>
         <span class="storefront-sticky-cart-cta">Checkout →</span>

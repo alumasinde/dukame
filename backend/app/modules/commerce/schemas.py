@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 
 
 class CartItemAdd(BaseModel):
@@ -44,7 +44,7 @@ class PaymentMethodResponse(BaseModel):
     instructions: str | None = None
     callback_url: str | None = None
     callback_token: str | None = None
-
+    model_config = ConfigDict(from_attributes=True)
 
 class PaymentMethodCreate(BaseModel):
     code: str = Field(min_length=2, max_length=32)
